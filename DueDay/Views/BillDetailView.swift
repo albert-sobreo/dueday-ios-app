@@ -33,10 +33,26 @@ struct BillDetailView: View {
         (bill.instances ?? []).sorted { $0.dueDate < $1.dueDate }
     }
 
-    /// The bill to show: the nearest unpaid one, else the oldest overdue, else the latest paid.
+    private var cutoff: Cutoff? {
+        bill.profile.flatMap { CutoffCalculator.cutoff(containing: .now, paydays: $0.paydays) }
+    }
+
+    /// The nearest bill not paid yet, however far away. Reminders are sent for this one.
+    private var nextUnpaid: BillInstance? {
+        let unpaid = sortedInstances.filter { !$0.isPaid }
+        return unpaid.first { $0.status() != .overdue } ?? unpaid.first
+    }
+
+    /// The bill to show: the nearest unpaid one if it's close, else an overdue one, else the latest
+    /// paid. A fixed bill is generated months ahead, so once this month's is paid the header keeps
+    /// showing it as paid, rather than jumping to next month's. With nothing paid yet, the first
+    /// upcoming bill is shown.
     private var current: BillInstance? {
         let unpaid = sortedInstances.filter { !$0.isPaid }
-        return unpaid.first { $0.status() != .overdue } ?? unpaid.first ?? sortedInstances.last
+        let upcoming = unpaid.first { $0.status() != .overdue }
+        if let upcoming, upcoming.isUrgent(cutoff: cutoff) { return upcoming }
+        if let overdue = unpaid.first(where: { $0.status() == .overdue }) { return overdue }
+        return sortedInstances.last(where: \.isPaid) ?? upcoming
     }
 
     var body: some View {
@@ -408,12 +424,6 @@ struct BillDetailView: View {
                 subtitle: reminderSubtitle(daysBefore: 0),
                 isOn: reminderBinding(0)
             )
-            Divider().padding(.vertical, 10)
-            reminderRow(
-                title: "Lock screen on due day",
-                subtitle: "Stays until marked paid",
-                isOn: Binding(get: { bill.liveActivityEnabled }, set: { bill.liveActivityEnabled = $0 })
-            )
         }
         .cardStyle()
     }
@@ -428,9 +438,9 @@ struct BillDetailView: View {
         .tint(Theme.paid)
     }
 
-    /// "Mon, Nov 2 · 9:00 AM" for the current bill, or a hint when there's no bill yet.
+    /// "Mon, Nov 2 · 9:00 AM" for the next unpaid bill, or a hint when there's no bill yet.
     private func reminderSubtitle(daysBefore: Int) -> String {
-        guard let due = current?.dueDate, current?.isPaid == false else { return "Sent once a bill is added" }
+        guard let due = nextUnpaid?.dueDate else { return "Sent once a bill is added" }
         let calendar = Calendar.current
         let day = calendar.date(byAdding: .day, value: -daysBefore, to: due) ?? due
         // The reminder time is set in Settings (9:00 AM by default).
@@ -459,11 +469,15 @@ struct BillDetailView: View {
                 .foregroundStyle(Theme.ink)
 
             ForEach(bill.paidInstances.prefix(6)) { instance in
-                HStack(alignment: .top, spacing: 14) {
+                HStack(alignment: .center, spacing: 14) {
+                    // Sized so the capitals are as tall as the amount and the line under it together.
+                    // The fixed height keeps the row from growing to the font's full line height.
                     Text(instance.dueDate.formatted(.dateTime.month(.abbreviated)).uppercased())
-                        .font(.barlow(22, weight: .semibold, relativeTo: .title3))
+                        .font(.barlow(42, weight: .semibold, relativeTo: .title))
                         .foregroundStyle(strong)
-                        .frame(width: 48, alignment: .leading)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                        .frame(width: 66, height: 36, alignment: .leading)
                     VStack(alignment: .leading, spacing: 1) {
                         Text(instance.amount?.pesoString ?? "—")
                             .font(.outfit(16, weight: .semibold))

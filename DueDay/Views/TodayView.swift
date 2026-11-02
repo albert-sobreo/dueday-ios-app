@@ -33,9 +33,11 @@ struct TodayView: View {
     private var unpaid: [BillInstance] { visible.filter { !$0.isPaid } }
 
     /// The most urgent bill: the oldest overdue one if there is any, otherwise the nearest one due.
-    /// `unpaid` is sorted by due date, so the first item is the right one either way.
+    /// `unpaid` is sorted by due date, so the first urgent item is the right one either way. A fixed
+    /// bill that's still weeks away isn't urgent (see `isUrgent`), so after paying this month's,
+    /// next month's doesn't take over the hero. Later ones are listed below instead.
     private var hero: BillInstance? {
-        unpaid.first
+        unpaid.first { $0.isUrgent(cutoff: currentCutoff, now: now) }
     }
 
     /// Paydays only make sense for a single profile; "All" mixes different schedules.
@@ -73,6 +75,8 @@ struct TodayView: View {
 
     /// Other unpaid bills due in the same cutoff as the hero. Without paydays, the next few bills due.
     private var alsoThisCutoff: [BillInstance] {
+        // Only shown under the hero. Without one, these bills go in the upcoming list instead.
+        guard hero != nil else { return [] }
         let others = homeUnpaid.filter { $0.id != hero?.id && $0.status() != .overdue }
         if let cutoff = currentCutoff {
             return Array(others.filter { cutoff.contains($0.dueDate) }.prefix(3))
@@ -438,7 +442,7 @@ private struct EmptyHero: View {
                 .foregroundStyle(Theme.todayStrong)
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
-            Text(hasBills ? "No unpaid bills right now." : "Add your first bill and we'll remind you before it's due. Everything stays on your phone.")
+            Text(hasBills ? "Nothing is due soon." : "Add your first bill and we'll remind you before it's due. Everything stays on your phone.")
                 .font(.outfit(16))
                 .foregroundStyle(Theme.ink)
         }

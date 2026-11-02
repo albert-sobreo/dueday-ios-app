@@ -6,6 +6,8 @@ import UserNotifications
 @main struct MyApp: App {
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
+    @AppStorage(AppLock.enabledKey) private var lockEnabled = false
+    @State private var lock = AppLock()
 
     init() {
         FontRegistrar.registerAll()
@@ -27,18 +29,27 @@ import UserNotifications
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .id(lock.generation)
                 .preferredColorScheme(AppearanceMode(rawValue: appearance)?.colorScheme)
+                .overlay {
+                    // Also covers the app while it's inactive, so the app switcher shows nothing.
+                    if lock.isLocked || (lockEnabled && scenePhase != .active) {
+                        LockCover(lock: lock)
+                    }
+                }
         }
         .modelContainer(container)
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
+                Task { await lock.unlock(automatic: true) }
                 // Keep a few months of instances ahead of today, and the reminders up to date.
                 ProfileSeeder.ensureDefault(in: container.mainContext)
                 InstanceGenerator.generateAll(in: container.mainContext)
                 Task { await ReminderScheduler.reschedule(in: container.mainContext) }
                 DueDayShortcuts.updateAppShortcutParameters()
             case .background:
+                lock.lockIfNeeded()
                 // Changes made while the app was open become reminders as the person leaves.
                 try? container.mainContext.save()
                 Task { await ReminderScheduler.reschedule(in: container.mainContext) }

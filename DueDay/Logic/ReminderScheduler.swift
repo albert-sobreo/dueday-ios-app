@@ -12,6 +12,16 @@ enum ReminderSettings {
         UserDefaults.standard.object(forKey: minutesKey) as? Int ?? defaultMinutes
     }
 
+    /// Whether an unpaid bill keeps reminding after its due date. On unless the person turns it off.
+    static let overdueKey = "overdueReminders"
+    static let overdueDefault = true
+    /// Days after the due date that an overdue reminder goes off.
+    static let overdueOffsets = [1, 3]
+
+    static var overdueEnabled: Bool {
+        UserDefaults.standard.object(forKey: overdueKey) as? Bool ?? overdueDefault
+    }
+
     /// The time of day on a given date.
     static func date(on day: Date, calendar: Calendar = .current) -> Date {
         let start = calendar.startOfDay(for: day)
@@ -92,6 +102,27 @@ enum ReminderScheduler {
                 }
             }
 
+            // Follow-ups after the due date, until the bill is paid. Ones already in the past are skipped.
+            if ReminderSettings.overdueEnabled {
+                for instance in bill.instances ?? [] where !instance.isPaid {
+                    for offset in ReminderSettings.overdueOffsets {
+                        guard let day = calendar.date(byAdding: .day, value: offset, to: instance.dueDate) else { continue }
+                        let fireDate = ReminderSettings.date(on: day, calendar: calendar)
+                        guard fireDate > now else { continue }
+
+                        let content = UNMutableNotificationContent()
+                        content.title = prefix + bill.name
+                        content.body = overdueBody(for: instance, daysLate: offset)
+                        content.sound = .default
+                        content.categoryIdentifier = billCategory
+                        content.userInfo = ["instanceID": instance.id.uuidString]
+                        pending.append((fireDate, request(
+                            id: "overdue-\(instance.id.uuidString)-\(offset)", content: content, date: fireDate, calendar: calendar
+                        )))
+                    }
+                }
+            }
+
             // A nudge for a variable account whose bill hasn't been added yet this month.
             if let nudge = nudgeDate(for: bill, now: now, calendar: calendar) {
                 let content = UNMutableNotificationContent()
@@ -127,6 +158,12 @@ enum ReminderScheduler {
         }
         if let amount = instance.amount { return "\(when) · \(amount.currencyString)" }
         return when
+    }
+
+    private static func overdueBody(for instance: BillInstance, daysLate: Int) -> String {
+        let late = daysLate == 1 ? "Overdue by 1 day" : "Overdue by \(daysLate) days"
+        if let amount = instance.amount { return "\(late) · \(amount.currencyString)" }
+        return late
     }
 
     /// The next time to nudge: the account's usual arrival day, this month if it's still ahead and no

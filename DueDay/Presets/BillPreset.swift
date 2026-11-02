@@ -18,6 +18,10 @@ struct BillPreset: Codable, Identifiable, Hashable {
 enum PresetStore {
     static let all: [BillPreset] = load()
 
+    /// The presets grouped by category, made once. The picker redraws as you type, so it shouldn't
+    /// sort them out again each time.
+    static let byCategory: [BillCategory: [BillPreset]] = Dictionary(grouping: all, by: \.category)
+
     static func preset(withID id: String?) -> BillPreset? {
         guard let id else { return nil }
         return all.first { $0.id == id }

@@ -66,12 +66,13 @@ struct AddBillView: View {
             ScrollView {
                 VStack(spacing: 0) {
                     header
-                    VStack(alignment: .leading, spacing: 24) {
+                    // Lazy, so the sections far down the list are only built as they scroll into view.
+                    LazyVStack(alignment: .leading, spacing: 24) {
                         customButton
                         if !savedAccounts.isEmpty { savedAccountsSection }
                         if !myProviders.isEmpty { myProvidersSection }
                         ForEach(BillCategory.allCases) { category in
-                            let presets = PresetStore.all.filter { $0.category == category && matches($0.name) }
+                            let presets = (PresetStore.byCategory[category] ?? []).filter { matches($0.name) }
                             if !presets.isEmpty { presetSection(category, presets) }
                         }
                     }

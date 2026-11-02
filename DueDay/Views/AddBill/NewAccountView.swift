@@ -179,11 +179,13 @@ struct NewAccountView: View {
         FormCard(
             title: "Schedule",
             symbol: "calendar",
-            footer: recurrence == .once ? nil : "Repeats on this day each month. Short months use their last day."
+            footer: recurrence == .once ? nil
+                : recurrence.isWeekly ? "Repeats on the same weekday as this date."
+                : "Repeats on this day each month. Short months use their last day."
         ) {
             VStack(alignment: .leading, spacing: 6) {
                 FieldLabel("Repeats")
-                ChipGrid(options: RecurrenceKind.allCases, selected: $recurrence, title: { $0.title })
+                ChipGrid(options: RecurrenceKind.displayOrder, selected: $recurrence, title: { $0.title })
             }
             if recurrence == .everyNMonths {
                 Stepper("Every \(interval) months", value: $interval, in: 2...11)

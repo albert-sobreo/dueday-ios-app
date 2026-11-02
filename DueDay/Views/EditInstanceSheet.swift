@@ -64,7 +64,11 @@ struct EditInstanceSheet: View {
         instance.amount = amount
         instance.dueDate = calendar.startOfDay(for: dueDate)
         // Keep the month key in step with the due date so it can't collide with another month's bill.
-        instance.periodKey = calendar.component(.year, from: dueDate) * 100 + calendar.component(.month, from: dueDate)
+        // A weekly bill's key names its scheduled slot, so moving the date leaves it alone. Otherwise
+        // the app would fill the empty slot again with a second bill.
+        if instance.bill?.recurrence.isWeekly != true {
+            instance.periodKey = calendar.component(.year, from: dueDate) * 100 + calendar.component(.month, from: dueDate)
+        }
         let period = billingPeriod.trimmingCharacters(in: .whitespaces)
         instance.billingPeriod = period.isEmpty ? nil : period
         dismiss()

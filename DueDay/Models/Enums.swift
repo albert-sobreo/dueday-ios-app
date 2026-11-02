@@ -91,6 +91,7 @@ enum AmountType: String, Codable, CaseIterable, Identifiable {
 
 enum RecurrenceKind: String, Codable, CaseIterable, Identifiable {
     case monthly, everyNMonths, yearly, once
+    case weekly, everyTwoWeeks
 
     var id: String { rawValue }
 
@@ -100,8 +101,19 @@ enum RecurrenceKind: String, Codable, CaseIterable, Identifiable {
         case .monthly: "Monthly"
         case .everyNMonths: "Every N months"
         case .yearly: "Yearly"
+        case .weekly: "Every week"
+        case .everyTwoWeeks: "Every 2 weeks"
         }
     }
+
+    /// The order the choices are shown in. New cases are only ever added at the end of the enum.
+    static let displayOrder: [RecurrenceKind] = [.monthly, .weekly, .everyTwoWeeks, .everyNMonths, .yearly, .once]
+
+    /// Repeats by days from its first due date, rather than on a day of the month.
+    var isWeekly: Bool { self == .weekly || self == .everyTwoWeeks }
+
+    /// Days between bills for a weekly kind.
+    var dayStep: Int { self == .everyTwoWeeks ? 14 : 7 }
 }
 
 enum WeekendRule: String, Codable, CaseIterable, Identifiable {

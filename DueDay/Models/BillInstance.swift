@@ -36,6 +36,20 @@ final class BillInstance {
         return due > today ? .upcoming : .overdue
     }
 
+    /// Whether this unpaid bill is close enough to headline a screen, such as Home's top card or a
+    /// bill's header. A fixed bill is generated months ahead, so after paying this month's, next
+    /// month's shouldn't take over. It counts if it's overdue, due within a week, or due in the
+    /// current cutoff. A variable bill only exists because the person added it, so it always counts.
+    func isUrgent(cutoff: Cutoff?, now: Date = .now, calendar: Calendar = .current) -> Bool {
+        if bill?.amountType == .variable || status(now: now, calendar: calendar) == .overdue { return true }
+        let today = calendar.startOfDay(for: now)
+        if let inAWeek = calendar.date(byAdding: .day, value: 7, to: today),
+           calendar.startOfDay(for: dueDate) <= inAWeek {
+            return true
+        }
+        return cutoff?.contains(dueDate, calendar: calendar) ?? false
+    }
+
     /// The most recent payment, if any.
     var latestPayment: Payment? {
         (payments ?? []).max { $0.paidDate < $1.paidDate }

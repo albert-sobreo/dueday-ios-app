@@ -111,9 +111,18 @@ final class Bill {
     /// Months between two consecutive bills.
     var monthStep: Int {
         switch recurrence {
-        case .monthly, .once: 1
+        case .monthly, .once, .weekly, .everyTwoWeeks: 1
         case .everyNMonths: max(recurrenceInterval, 1)
         case .yearly: 12
         }
+    }
+
+    /// Tells one bill of this account from another so none is generated twice. It's the month
+    /// (year * 100 + month), or for weekly bills the day (year * 10000 + month * 100 + day), since a
+    /// month holds several.
+    func periodKey(for date: Date, calendar: Calendar = .current) -> Int {
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        let monthKey = (parts.year ?? 0) * 100 + (parts.month ?? 0)
+        return recurrence.isWeekly ? monthKey * 100 + (parts.day ?? 0) : monthKey
     }
 }

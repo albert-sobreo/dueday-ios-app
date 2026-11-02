@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 import UserNotifications
 
 struct SettingsView: View {
@@ -8,11 +9,71 @@ struct SettingsView: View {
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
     @AppStorage(CurrencySetting.storageKey) private var currencyCode = CurrencySetting.detectedCode
     @AppStorage(ReminderSettings.minutesKey) private var reminderMinutes = ReminderSettings.defaultMinutes
+    @AppStorage(ReminderSettings.overdueKey) private var overdueReminders = ReminderSettings.overdueDefault
     @Environment(\.modelContext) private var modelContext
     @Environment(\.openURL) private var openURL
     @State private var showingProfiles = false
     @State private var confirmingClear = false
     @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+    @State private var backupDocument: BackupDocument?
+    @State private var exportingBackup = false
+    @State private var importingBackup = false
+    @State private var backupMessage: String?
+    @AppStorage(AppLock.enabledKey) private var appLockEnabled = false
+    @State private var lockMessage: String?
+
+    /// Turning the lock on or off asks for Face ID or the passcode first, so someone holding an
+    /// unlocked phone can't switch it off.
+    private var lockToggle: Binding<Bool> {
+        Binding(
+            get: { appLockEnabled },
+            set: { wanted in
+                guard wanted != appLockEnabled else { return }
+                guard AppLock.isAvailable else {
+                    lockMessage = "Set a passcode for this iPhone in the Settings app first. DueDay uses it to unlock."
+                    return
+                }
+                Task {
+                    let reason = wanted ? "Turn on the DueDay lock" : "Turn off the DueDay lock"
+                    if await AppLock.authenticate(reason: reason) { appLockEnabled = wanted }
+                }
+            }
+        )
+    }
+
+    /// Saves everything to a file the user can keep in iCloud Drive or send to themselves.
+    private func exportBackup() {
+        do {
+            backupDocument = BackupDocument(data: try BackupManager.makeBackup(from: modelContext))
+            exportingBackup = true
+        } catch {
+            backupMessage = "The backup couldn't be made: \(error.localizedDescription)"
+        }
+    }
+
+    private func importBackup(_ result: Result<[URL], Error>) {
+        switch result {
+        case .failure(let error):
+            backupMessage = "The file couldn't be opened: \(error.localizedDescription)"
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            // Read now, while access to the file is open. It ends when this function returns.
+            guard let data = try? Data(contentsOf: url) else {
+                backupMessage = "The file couldn't be read."
+                return
+            }
+            let context = modelContext
+            Task {
+                do {
+                    backupMessage = try await BackupManager.restore(data, into: context).message
+                } catch {
+                    backupMessage = error.localizedDescription
+                }
+            }
+        }
+    }
 
     #if DEBUG
     /// Adds the sample accounts and bills, then keeps generated bills and reminders up to date.
@@ -114,6 +175,7 @@ struct SettingsView: View {
 
             Section {
                 DatePicker("Remind me at", selection: reminderTime, displayedComponents: .hourAndMinute)
+                Toggle("Remind me when a bill is overdue", isOn: $overdueReminders)
 
                 if notificationsAllowed {
                     Label("Notifications are on", systemImage: "checkmark.circle.fill")
@@ -136,7 +198,7 @@ struct SettingsView: View {
             } header: {
                 Text("Reminders")
             } footer: {
-                Text("Each bill reminds you on the days set in its own settings, at this time. Reminders have a Mark paid button.")
+                Text("Each bill reminds you on the days set in its own settings, at this time. An unpaid bill reminds you again 1 and 3 days after its due date. Reminders have a Mark paid button.")
             }
 
             Section {
@@ -152,8 +214,25 @@ struct SettingsView: View {
                 Text("System follows your iPhone's light or dark setting.")
             }
 
+            Section {
+                Toggle("Lock DueDay", isOn: lockToggle)
+            } header: {
+                Text("Privacy")
+            } footer: {
+                Text("Asks for Face ID, Touch ID or your passcode each time you open DueDay. Siri and reminder buttons still work while it's locked.")
+            }
+
             Section("Profiles") {
                 Button("Manage Profiles", systemImage: "person.2") { showingProfiles = true }
+            }
+
+            Section {
+                Button("Export Backup", systemImage: "square.and.arrow.up", action: exportBackup)
+                Button("Import Backup", systemImage: "square.and.arrow.down") { importingBackup = true }
+            } header: {
+                Text("Backup")
+            } footer: {
+                Text("Your bills stay on this device, so save a backup file somewhere safe, such as iCloud Drive. Importing adds what's missing and never deletes or changes what you have.")
             }
 
             SupportSection()
@@ -187,8 +266,40 @@ struct SettingsView: View {
             Text("This can't be undone.")
         }
         #endif
+        .fileExporter(
+            isPresented: $exportingBackup,
+            document: backupDocument,
+            contentType: .json,
+            defaultFilename: "DueDay Backup"
+        ) { result in
+            if case .failure(let error) = result {
+                backupMessage = "The backup couldn't be saved: \(error.localizedDescription)"
+            }
+        }
+        .fileImporter(isPresented: $importingBackup, allowedContentTypes: [.json], onCompletion: { result in
+            importBackup(result.map { [$0] })
+        })
+        .alert(
+            "Can't turn on the lock",
+            isPresented: Binding(get: { lockMessage != nil }, set: { if !$0 { lockMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(lockMessage ?? "")
+        }
+        .alert(
+            "Backup",
+            isPresented: Binding(get: { backupMessage != nil }, set: { if !$0 { backupMessage = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(backupMessage ?? "")
+        }
         .task { notificationStatus = await ReminderScheduler.authorizationStatus() }
         .onChange(of: reminderMinutes) {
+            Task { await ReminderScheduler.reschedule(in: modelContext) }
+        }
+        .onChange(of: overdueReminders) {
             Task { await ReminderScheduler.reschedule(in: modelContext) }
         }
         .sheet(isPresented: $showingProfiles) {

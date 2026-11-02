@@ -17,17 +17,19 @@ enum DueDateCalculator {
         else { return nil }
 
         components.day = min(max(dueDay, 1), dayRange.count)
-        guard var date = calendar.date(from: components) else { return nil }
+        guard let date = calendar.date(from: components) else { return nil }
+        return applyWeekendRule(weekendRule, to: date, calendar: calendar)
+    }
 
-        if weekendRule == .previousBusinessDay {
-            // Saturday goes back one day, Sunday goes back two.
-            switch calendar.component(.weekday, from: date) {
-            case 7: date = calendar.date(byAdding: .day, value: -1, to: date) ?? date
-            case 1: date = calendar.date(byAdding: .day, value: -2, to: date) ?? date
-            default: break
-            }
+    /// Moves a weekend date back to the Friday before, if the rule says so.
+    static func applyWeekendRule(_ rule: WeekendRule, to date: Date, calendar: Calendar = .current) -> Date {
+        guard rule == .previousBusinessDay else { return date }
+        // Saturday goes back one day, Sunday goes back two.
+        switch calendar.component(.weekday, from: date) {
+        case 7: return calendar.date(byAdding: .day, value: -1, to: date) ?? date
+        case 1: return calendar.date(byAdding: .day, value: -2, to: date) ?? date
+        default: return date
         }
-        return date
     }
 }
 
@@ -57,6 +59,11 @@ enum InstanceGenerator {
             else { return }
             let amount = bill.amountType == .fixed ? bill.defaultAmount : nil
             context.insert(BillInstance(bill: bill, dueDate: due, periodKey: key, amount: amount))
+            return
+        }
+
+        if bill.recurrence.isWeekly {
+            generateWeekly(for: bill, monthsAhead: monthsAhead, now: now, calendar: calendar, in: context)
             return
         }
 
@@ -94,6 +101,43 @@ enum InstanceGenerator {
                 context.insert(instance)
             }
             index += step
+        }
+    }
+
+    /// Weekly and every-two-weeks bills: one instance every 7 or 14 days from the first due date,
+    /// from the start of the current month through `monthsAhead` months out.
+    private static func generateWeekly(
+        for bill: Bill,
+        monthsAhead: Int,
+        now: Date,
+        calendar: Calendar,
+        in context: ModelContext
+    ) {
+        let step = bill.recurrence.dayStep
+        let anchor = calendar.startOfDay(for: bill.startDate)
+        guard let startOfMonth = calendar.dateInterval(of: .month, for: now)?.start,
+              let horizon = calendar.date(byAdding: .month, value: monthsAhead + 1, to: startOfMonth)
+        else { return }
+
+        // Skip ahead to the first occurrence in or after the current month.
+        var due = anchor
+        if due < startOfMonth {
+            let days = calendar.dateComponents([.day], from: anchor, to: startOfMonth).day ?? 0
+            due = calendar.date(byAdding: .day, value: ((days + step - 1) / step) * step, to: anchor) ?? horizon
+        }
+
+        let existingKeys = Set((bill.instances ?? []).map(\.periodKey))
+        let amount = bill.defaultAmount
+
+        while due < horizon {
+            let key = bill.periodKey(for: due, calendar: calendar)
+            if !existingKeys.contains(key) {
+                // The key follows the scheduled day, so a weekend shift can't make a duplicate later.
+                let shifted = DueDateCalculator.applyWeekendRule(bill.weekendRule, to: due, calendar: calendar)
+                context.insert(BillInstance(bill: bill, dueDate: shifted, periodKey: key, amount: amount))
+            }
+            guard let next = calendar.date(byAdding: .day, value: step, to: due) else { break }
+            due = next
         }
     }
 
