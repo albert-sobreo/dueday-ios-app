@@ -206,6 +206,7 @@ struct TodayView: View {
     }
 }
 
+#if DEBUG
 #Preview("Today") {
     let container = try! ModelContainer(
         for: Profile.self, CustomProvider.self, CustomPaymentMethod.self, Bill.self, BillInstance.self, Payment.self,
@@ -219,6 +220,7 @@ struct TodayView: View {
     return NavigationStack { TodayView() }
         .modelContainer(container)
 }
+#endif
 
 // MARK: - Hero
 
