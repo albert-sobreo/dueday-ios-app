@@ -1,0 +1,42 @@
+[
+  { "id": "meralco", "name": "Meralco", "category": "electricity", "icon": "bolt.fill", "colorHex": "F4511E", "amountType": "variable", "accountNumberLabel": "Customer Account Number", "keywords": ["MERALCO"] },
+  { "id": "veco", "name": "Visayan Electric (VECO)", "category": "electricity", "icon": "bolt.fill", "colorHex": "F9A825", "amountType": "variable", "accountNumberLabel": "Account Number", "keywords": ["VISAYAN ELECTRIC", "VECO"] },
+  { "id": "davao-light", "name": "Davao Light", "category": "electricity", "icon": "bolt.fill", "colorHex": "FB8C00", "amountType": "variable", "accountNumberLabel": "Account Number", "keywords": ["DAVAO LIGHT"] },
+  { "id": "electric-coop", "name": "Electric Cooperative", "category": "electricity", "icon": "bolt.fill", "colorHex": "FFA000", "amountType": "variable", "accountNumberLabel": "Account Number", "keywords": null },
+
+  { "id": "maynilad", "name": "Maynilad", "category": "water", "icon": "drop.fill", "colorHex": "0288D1", "amountType": "variable", "accountNumberLabel": "Contract Account Number", "keywords": ["MAYNILAD"] },
+  { "id": "manila-water", "name": "Manila Water", "category": "water", "icon": "drop.fill", "colorHex": "0277BD", "amountType": "variable", "accountNumberLabel": "Contract Account Number", "keywords": ["MANILA WATER"] },
+  { "id": "primewater", "name": "PrimeWater", "category": "water", "icon": "drop.fill", "colorHex": "039BE5", "amountType": "variable", "accountNumberLabel": "Account Number", "keywords": ["PRIMEWATER", "PRIME WATER"] },
+  { "id": "water-district", "name": "Local Water District", "category": "water", "icon": "drop.fill", "colorHex": "29B6F6", "amountType": "variable", "accountNumberLabel": "Account Number", "keywords": null },
+
+  { "id": "pldt", "name": "PLDT", "category": "internetPhone", "icon": "wifi", "colorHex": "D32F2F", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["PLDT"] },
+  { "id": "globe", "name": "Globe At Home / Postpaid", "category": "internetPhone", "icon": "wifi", "colorHex": "1565C0", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["GLOBE"] },
+  { "id": "smart", "name": "Smart Postpaid", "category": "internetPhone", "icon": "iphone", "colorHex": "2E7D32", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["SMART"] },
+  { "id": "converge", "name": "Converge", "category": "internetPhone", "icon": "wifi", "colorHex": "EF6C00", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["CONVERGE"] },
+  { "id": "sky", "name": "Sky", "category": "internetPhone", "icon": "wifi", "colorHex": "0097A7", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["SKY"] },
+  { "id": "dito", "name": "DITO", "category": "internetPhone", "icon": "iphone", "colorHex": "1976D2", "amountType": "fixed", "accountNumberLabel": "Account Number", "keywords": ["DITO"] },
+
+  { "id": "sss", "name": "SSS", "category": "government", "icon": "building.columns.fill", "colorHex": "1E88E5", "amountType": "fixed", "accountNumberLabel": "SS Number", "keywords": ["SSS"] },
+  { "id": "pagibig", "name": "Pag-IBIG", "category": "government", "icon": "building.columns.fill", "colorHex": "E53935", "amountType": "fixed", "accountNumberLabel": "Pag-IBIG MID Number", "keywords": ["PAG-IBIG", "PAGIBIG"] },
+  { "id": "philhealth", "name": "PhilHealth", "category": "government", "icon": "cross.case.fill", "colorHex": "43A047", "amountType": "fixed", "accountNumberLabel": "PhilHealth Identification Number", "keywords": ["PHILHEALTH"] },
+
+  { "id": "bpi-card", "name": "BPI Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "B71C1C", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["BPI"] },
+  { "id": "bdo-card", "name": "BDO Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "0D47A1", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["BDO"] },
+  { "id": "metrobank-card", "name": "Metrobank Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "1A237E", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["METROBANK"] },
+  { "id": "securitybank-card", "name": "Security Bank Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "00695C", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["SECURITY BANK"] },
+  { "id": "rcbc-card", "name": "RCBC Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "283593", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["RCBC"] },
+  { "id": "unionbank-card", "name": "UnionBank Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "EF6C00", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": ["UNIONBANK"] },
+  { "id": "credit-card", "name": "Other Credit Card", "category": "creditCard", "icon": "creditcard.fill", "colorHex": "6A1B9A", "amountType": "variable", "accountNumberLabel": "Card Number (last 4)", "keywords": null },
+
+  { "id": "insurance", "name": "Insurance", "category": "insurance", "icon": "shield.fill", "colorHex": "00897B", "amountType": "fixed", "accountNumberLabel": "Policy Number", "keywords": null },
+
+  { "id": "rent", "name": "Rent", "category": "housing", "icon": "house.fill", "colorHex": "6D4C41", "amountType": "fixed", "accountNumberLabel": null, "keywords": null },
+  { "id": "condo-dues", "name": "Condo / HOA Dues", "category": "housing", "icon": "building.2.fill", "colorHex": "5D4037", "amountType": "fixed", "accountNumberLabel": "Unit Number", "keywords": null },
+  { "id": "amortization", "name": "Amortization", "category": "housing", "icon": "house.fill", "colorHex": "795548", "amountType": "fixed", "accountNumberLabel": "Loan Number", "keywords": null },
+
+  { "id": "streaming", "name": "Streaming", "category": "subscription", "icon": "play.rectangle.fill", "colorHex": "D81B60", "amountType": "fixed", "accountNumberLabel": null, "keywords": null },
+  { "id": "cloud-storage", "name": "Cloud Storage", "category": "subscription", "icon": "icloud.fill", "colorHex": "3949AB", "amountType": "fixed", "accountNumberLabel": null, "keywords": null },
+  { "id": "gym", "name": "Gym Membership", "category": "subscription", "icon": "dumbbell.fill", "colorHex": "E64A19", "amountType": "fixed", "accountNumberLabel": "Member Number", "keywords": null },
+
+  { "id": "tuition", "name": "Tuition", "category": "education", "icon": "graduationcap.fill", "colorHex": "388E3C", "amountType": "fixed", "accountNumberLabel": "Student Number", "keywords": null }
+]
