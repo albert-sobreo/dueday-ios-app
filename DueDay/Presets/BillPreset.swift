@@ -12,7 +12,7 @@ struct BillPreset: Codable, Identifiable, Hashable {
     /// Words that identify this biller on a scanned bill (used by scanning in phase 2).
     let keywords: [String]?
 
-    var color: Color { Color(hex: colorHex) }
+    var color: Color { Color.adaptive(hex: colorHex) }
 }
 
 enum PresetStore {

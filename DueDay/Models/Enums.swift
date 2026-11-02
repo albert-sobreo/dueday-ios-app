@@ -54,6 +54,28 @@ enum BillCategory: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum ProfileKind: String, Codable, CaseIterable, Identifiable {
+    case personal, business, someoneElse
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .personal: "Personal"
+        case .business: "Business"
+        case .someoneElse: "Someone else"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .personal: "person.fill"
+        case .business: "briefcase.fill"
+        case .someoneElse: "person.2.fill"
+        }
+    }
+}
+
 enum AmountType: String, Codable, CaseIterable, Identifiable {
     case fixed, variable
 
@@ -68,12 +90,13 @@ enum AmountType: String, Codable, CaseIterable, Identifiable {
 }
 
 enum RecurrenceKind: String, Codable, CaseIterable, Identifiable {
-    case monthly, everyNMonths, yearly
+    case monthly, everyNMonths, yearly, once
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
+        case .once: "Does not repeat"
         case .monthly: "Monthly"
         case .everyNMonths: "Every N months"
         case .yearly: "Yearly"
@@ -129,6 +152,17 @@ enum PaymentMethod: String, Codable, CaseIterable, Identifiable {
         case .overTheCounter: "Over-the-counter"
         case .autoDebit: "Auto-debit"
         case .creditCard: "Credit card"
+        }
+    }
+
+    /// Short description shown under the name, as in the design.
+    var subtitle: String {
+        switch self {
+        case .gcash, .maya: "E-wallet"
+        case .bankTransfer: "InstaPay / PESONet"
+        case .overTheCounter: "Bayad, 7-Eleven"
+        case .autoDebit: "From account"
+        case .creditCard: "Online"
         }
     }
 

@@ -11,49 +11,125 @@ struct MarkPaidSheet: View {
     @State private var method: PaymentMethod?
     @State private var paidDate = Date()
     @State private var referenceNumber = ""
-    @State private var note = ""
+    @State private var keepAttachment = true
 
     private var amount: Decimal? { amountText.parsedAmount }
+    private var strong: Color { Theme.detailStrong }
+
+    private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+
+    private var title: String {
+        let name = instance.bill?.name ?? "Bill"
+        let month = instance.dueDate.formatted(.dateTime.month(.abbreviated))
+        return "\(name) · \(month)".uppercased()
+    }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                Section("Amount") {
-                    TextField("₱0.00", text: $amountText)
-                        .keyboardType(.decimalPad)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow("Mark as paid")
+                        Text(title)
+                            .font(.barlow(44, relativeTo: .largeTitle))
+                            .foregroundStyle(strong)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.6)
+                    }
+                    Spacer()
+                    Button("Close", systemImage: "xmark") { dismiss() }
+                        .labelStyle(.iconOnly)
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.circle)
+                        .tint(Theme.ink)
                 }
 
-                Section("Payment") {
-                    Picker("Method", selection: $method) {
-                        Text("Not specified").tag(PaymentMethod?.none)
-                        ForEach(PaymentMethod.allCases) { method in
-                            Label(method.title, systemImage: method.symbol)
-                                .tag(PaymentMethod?.some(method))
+                VStack(alignment: .leading, spacing: 6) {
+                    Eyebrow("Amount paid")
+                    HStack(alignment: .firstTextBaseline, spacing: 6) {
+                        Text(CurrencySetting.symbol).font(.barlow(44, weight: .medium)).foregroundStyle(Theme.ink)
+                        TextField("0.00", text: $amountText)
+                            .font(.barlow(44, weight: .medium))
+                            .keyboardType(.decimalPad)
+                    }
+                    Rectangle().fill(Theme.ink).frame(height: 1.5)
+                }
+
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow("Date paid")
+                        DatePicker("Date paid", selection: $paidDate, in: ...Date.now, displayedComponents: .date)
+                            .labelsHidden()
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 8)
+                            .glassSurface(cornerRadius: 14)
+                    }
+                    VStack(alignment: .leading, spacing: 6) {
+                        Eyebrow("Reference no.")
+                        TextField("Optional", text: $referenceNumber)
+                            .font(.outfit(16))
+                            .textInputAutocapitalization(.characters)
+                            .padding(.horizontal, 14)
+                            .frame(minHeight: 46)
+                            .glassSurface(cornerRadius: 14)
+                    }
+                }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Eyebrow("Paid with")
+                    LazyVGrid(columns: columns, spacing: 10) {
+                        ForEach(PaymentMethod.allCases) { option in
+                            methodTile(option)
                         }
                     }
-                    DatePicker("Date paid", selection: $paidDate, displayedComponents: .date)
-                    TextField("Reference number (optional)", text: $referenceNumber)
-                    TextField("Note (optional)", text: $note)
                 }
+
+                if instance.attachment != nil {
+                    Toggle(isOn: $keepAttachment) {
+                        Text("Attach the scanned bill to this payment").font(.outfit(15))
+                    }
+                    .toggleStyle(.switch)
+                    .tint(Theme.paid)
+                }
+
+                Button(action: save) {
+                    Label("Confirm payment", systemImage: "checkmark")
+                        .font(.outfit(17, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 36)
+                }
+                .primaryButton()
+                .disabled((amount ?? 0) <= 0)
             }
-            .navigationTitle(instance.bill?.name ?? "Mark as paid")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Mark paid") { save() }
-                        .disabled((amount ?? 0) <= 0)
-                }
-            }
-            .onAppear {
-                method = instance.bill?.defaultPaymentMethod
-                if let existing = instance.amount {
-                    amountText = "\(existing)"
-                }
+            .padding(20)
+        }
+        .background(Theme.background)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .onAppear {
+            method = instance.bill?.defaultPaymentMethod
+            if let existing = instance.amount {
+                amountText = "\(existing)"
             }
         }
+    }
+
+    private func methodTile(_ option: PaymentMethod) -> some View {
+        let isSelected = method == option
+        return Button { method = isSelected ? nil : option } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(option.title).font(.outfit(15, weight: .semibold))
+                Text(option.subtitle).font(.outfit(12)).opacity(0.8)
+            }
+            .foregroundStyle(isSelected ? Theme.onSelected : Theme.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .background {
+                if isSelected { RoundedRectangle(cornerRadius: 14).fill(Theme.selected) }
+            }
+            .glassSurface(cornerRadius: 14, enabled: !isSelected)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     private func save() {
@@ -63,9 +139,9 @@ struct MarkPaidSheet: View {
             method: method,
             date: paidDate,
             referenceNumber: referenceNumber.isEmpty ? nil : referenceNumber,
-            note: note.isEmpty ? nil : note,
             in: modelContext
         )
+        if !keepAttachment { instance.attachment = nil }
         dismiss()
     }
 }

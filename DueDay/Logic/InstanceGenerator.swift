@@ -41,7 +41,24 @@ enum InstanceGenerator {
         calendar: Calendar = .current,
         in context: ModelContext
     ) {
-        guard !bill.isArchived else { return }
+        // Variable bills (like electricity) are added by hand when they arrive, never generated.
+        guard !bill.isArchived, bill.amountType == .fixed else { return }
+
+        // A one-time bill has a single instance, on its start date's month.
+        if bill.recurrence == .once {
+            let parts = calendar.dateComponents([.year, .month], from: bill.startDate)
+            guard let year = parts.year, let month = parts.month else { return }
+            let key = year * 100 + month
+            guard !(bill.instances ?? []).contains(where: { $0.periodKey == key }),
+                  let due = DueDateCalculator.dueDate(
+                      year: year, month: month, dueDay: bill.dueDay,
+                      weekendRule: bill.weekendRule, calendar: calendar
+                  )
+            else { return }
+            let amount = bill.amountType == .fixed ? bill.defaultAmount : nil
+            context.insert(BillInstance(bill: bill, dueDate: due, periodKey: key, amount: amount))
+            return
+        }
 
         let start = calendar.dateComponents([.year, .month], from: bill.startDate)
         let current = calendar.dateComponents([.year, .month], from: now)
@@ -88,8 +105,13 @@ enum InstanceGenerator {
         calendar: Calendar = .current,
         in context: ModelContext
     ) {
+        // Bills on a variable account are entered by hand, so editing the account must not touch them.
+        guard bill.amountType == .fixed else { return }
+
         let startOfMonth = calendar.dateInterval(of: .month, for: now)?.start ?? now
-        for instance in bill.instances ?? [] where !instance.isPaid && instance.dueDate >= startOfMonth {
+        // A one-time bill has only one instance, so replace it even if it's already overdue.
+        let isOnce = bill.recurrence == .once
+        for instance in bill.instances ?? [] where !instance.isPaid && (isOnce || instance.dueDate >= startOfMonth) {
             context.delete(instance)
         }
         // Deleted objects can still show up in the relationship until saved.
