@@ -1,12 +1,63 @@
 import SwiftUI
 import SwiftData
+import UserNotifications
 
 struct SettingsView: View {
     @Query(sort: \Profile.sortOrder) private var profiles: [Profile]
     @AppStorage(selectedProfileKey) private var selectedProfileID = ""
     @AppStorage(AppearanceMode.storageKey) private var appearance = AppearanceMode.system.rawValue
     @AppStorage(CurrencySetting.storageKey) private var currencyCode = CurrencySetting.detectedCode
+    @AppStorage(ReminderSettings.minutesKey) private var reminderMinutes = ReminderSettings.defaultMinutes
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.openURL) private var openURL
     @State private var showingProfiles = false
+    @State private var confirmingClear = false
+    @State private var notificationStatus: UNAuthorizationStatus = .notDetermined
+
+    #if DEBUG
+    /// Adds the sample accounts and bills, then keeps generated bills and reminders up to date.
+    private func loadSampleBills() {
+        SampleData.populate(in: modelContext)
+        ProfileSeeder.ensureDefault(in: modelContext)
+        InstanceGenerator.generateAll(in: modelContext)
+        let context = modelContext
+        Task {
+            try? context.save()
+            await ReminderScheduler.reschedule(in: context)
+        }
+    }
+
+    /// Wipes the store for testing, then brings back the default profile as on a fresh install.
+    private func clearAllData() {
+        try? modelContext.delete(model: Bill.self)
+        try? modelContext.delete(model: BillInstance.self)
+        try? modelContext.delete(model: Payment.self)
+        try? modelContext.delete(model: CustomProvider.self)
+        try? modelContext.delete(model: CustomPaymentMethod.self)
+        try? modelContext.delete(model: Profile.self)
+        try? modelContext.save()
+        // Forget the choice, so the fresh Personal profile is selected like on a first launch.
+        UserDefaults.standard.removeObject(forKey: selectedProfileKey)
+        ProfileSeeder.ensureDefault(in: modelContext)
+        let context = modelContext
+        Task { await ReminderScheduler.reschedule(in: context) }
+    }
+    #endif
+
+    /// The reminder time as a date, for the time picker.
+    private var reminderTime: Binding<Date> {
+        Binding(
+            get: { ReminderSettings.date(on: .now) },
+            set: { newValue in
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: newValue)
+                reminderMinutes = (parts.hour ?? 9) * 60 + (parts.minute ?? 0)
+            }
+        )
+    }
+
+    private var notificationsAllowed: Bool {
+        notificationStatus == .authorized || notificationStatus == .provisional || notificationStatus == .ephemeral
+    }
 
     /// The offered currencies, plus the region's own if it isn't in the list.
     private var currencyChoices: [String] {
@@ -24,6 +75,17 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
+            // The title is the first row, so it scrolls away with the page, like on Bills.
+            Text("SETTINGS")
+                .font(.barlow(60, weight: .medium, relativeTo: .largeTitle))
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .listRowBackground(Color.clear)
+                // Same top and side spacing as the title on Bills (8 down, 20 in from the edge).
+                .listRowInsets(EdgeInsets(top: 8, leading: 0, bottom: 0, trailing: 0))
+
             Section {
                 ForEach(profiles) { profile in
                     NavigationLink {
@@ -51,6 +113,33 @@ struct SettingsView: View {
             }
 
             Section {
+                DatePicker("Remind me at", selection: reminderTime, displayedComponents: .hourAndMinute)
+
+                if notificationsAllowed {
+                    Label("Notifications are on", systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(Theme.paid)
+                } else if notificationStatus == .notDetermined {
+                    Button("Allow Notifications", systemImage: "bell.badge") {
+                        Task {
+                            _ = await ReminderScheduler.requestAuthorizationIfNeeded()
+                            notificationStatus = await ReminderScheduler.authorizationStatus()
+                            await ReminderScheduler.reschedule(in: modelContext)
+                        }
+                    }
+                } else {
+                    Label("Notifications are turned off for DueDay", systemImage: "bell.slash")
+                        .foregroundStyle(Theme.warning)
+                    Button("Open Settings", systemImage: "gearshape") {
+                        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
+                    }
+                }
+            } header: {
+                Text("Reminders")
+            } footer: {
+                Text("Each bill reminds you on the days set in its own settings, at this time. Reminders have a Mark paid button.")
+            }
+
+            Section {
                 Picker("Theme", selection: $appearance) {
                     ForEach(AppearanceMode.allCases) { mode in
                         Text(mode.title).tag(mode.rawValue)
@@ -67,15 +156,41 @@ struct SettingsView: View {
                 Button("Manage Profiles", systemImage: "person.2") { showingProfiles = true }
             }
 
+            SupportSection()
+
             Section("About") {
                 LabeledContent("Version", value: versionText)
                 Label("Your bills stay on this device. DueDay has no accounts and no server.", systemImage: "lock.shield")
                     .font(.outfit(14))
                     .foregroundStyle(Theme.mutedInk)
             }
+
+            #if DEBUG
+            Section {
+                Button("Load Sample Bills", systemImage: "tray.and.arrow.down") { loadSampleBills() }
+                Button("Clear All Data", systemImage: "trash", role: .destructive) { confirmingClear = true }
+            } header: {
+                Text("Debug")
+            } footer: {
+                Text("Only in debug builds. Sample bills are added to what you have. Clear All Data removes every bill, payment, profile and custom provider, and cancels reminders.")
+            }
+            #endif
         }
         .dueDayForm()
-        .navigationTitle("Settings")
+        // A list starts with extra space at the top; remove it so the title sits where Bills' does.
+        .contentMargins(.top, 0, for: .scrollContent)
+        .ownsTopOfScreen()
+        #if DEBUG
+        .confirmationDialog("Clear all data?", isPresented: $confirmingClear, titleVisibility: .visible) {
+            Button("Delete Everything", role: .destructive, action: clearAllData)
+        } message: {
+            Text("This can't be undone.")
+        }
+        #endif
+        .task { notificationStatus = await ReminderScheduler.authorizationStatus() }
+        .onChange(of: reminderMinutes) {
+            Task { await ReminderScheduler.reschedule(in: modelContext) }
+        }
         .sheet(isPresented: $showingProfiles) {
             ProfilesView(selectedID: $selectedProfileID)
         }

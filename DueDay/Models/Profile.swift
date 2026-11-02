@@ -42,5 +42,11 @@ enum ProfileSeeder {
         for bill in orphans {
             bill.profile = fallback
         }
+
+        // On the very first launch nothing is chosen yet, so start on the first profile (Personal)
+        // instead of "All". Choosing "All" later is kept, because that stores an empty value.
+        if UserDefaults.standard.object(forKey: selectedProfileKey) == nil {
+            UserDefaults.standard.set(fallback.id.uuidString, forKey: selectedProfileKey)
+        }
     }
 }

@@ -19,6 +19,8 @@ struct NewAccountView: View {
     let preset: BillPreset?
     var defaultProfileID = ""
     let onDone: () -> Void
+    /// Set when this form is the first screen of a sheet, to give it a Cancel button.
+    var onCancel: (() -> Void)?
 
     @Environment(\.modelContext) private var modelContext
     @Query(sort: \Profile.sortOrder) private var profiles: [Profile]
@@ -58,6 +60,12 @@ struct NewAccountView: View {
             showsCancel: false,
             primaryTitle: isVariable ? "Save account" : "Save bill",
             primaryEnabled: canSave,
+            onCancel: onCancel,
+            changeToken: [
+                name, accountNumber, amountText, billingPeriod, colorHex,
+                profile?.id, category, amountType, recurrence, interval, startDate, weekendRule,
+                reminderOffsets.sorted(), paymentMethod?.title, billDueDate, rememberProvider, logoData,
+            ] as [AnyHashable?],
             onPrimary: save
         ) {
             if profiles.count > 1 { profileCard }
@@ -102,6 +110,7 @@ struct NewAccountView: View {
                     ChipGrid(
                         options: BillCategory.allCases,
                         selected: $category,
+                        leadingAligned: true,
                         title: { $0.title },
                         symbol: { $0.symbol }
                     )
@@ -331,6 +340,15 @@ struct NewAccountView: View {
             }
         } else {
             InstanceGenerator.generate(for: bill, in: modelContext)
+        }
+
+        // The first saved bill is the moment to ask to send reminders, then schedule them.
+        let context = modelContext
+        Task {
+            if await ReminderScheduler.requestAuthorizationIfNeeded() {
+                try? context.save()
+                await ReminderScheduler.reschedule(in: context)
+            }
         }
         onDone()
     }

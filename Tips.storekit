@@ -1,0 +1,63 @@
+{
+  "identifier" : "D7A1C2E4",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "49.00",
+      "familyShareable" : false,
+      "internalID" : "6740100001",
+      "localizations" : [
+        {
+          "description" : "A small tip for DueDay. Unlocks nothing.",
+          "displayName" : "Small tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "tip.small",
+      "referenceName" : "Tip - Small",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "99.00",
+      "familyShareable" : false,
+      "internalID" : "6740100002",
+      "localizations" : [
+        {
+          "description" : "A medium tip for DueDay. Unlocks nothing.",
+          "displayName" : "Medium tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "tip.medium",
+      "referenceName" : "Tip - Medium",
+      "type" : "Consumable"
+    },
+    {
+      "displayPrice" : "249.00",
+      "familyShareable" : false,
+      "internalID" : "6740100003",
+      "localizations" : [
+        {
+          "description" : "A large tip for DueDay. Unlocks nothing.",
+          "displayName" : "Large tip",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "tip.large",
+      "referenceName" : "Tip - Large",
+      "type" : "Consumable"
+    }
+  ],
+  "settings" : {
+    "_storefront" : "PHL"
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

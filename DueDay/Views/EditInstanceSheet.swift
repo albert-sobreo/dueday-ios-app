@@ -19,6 +19,7 @@ struct EditInstanceSheet: View {
             primaryTitle: "Save",
             primaryEnabled: (amount ?? 0) > 0,
             onCancel: { dismiss() },
+            changeToken: [amountText, dueDate, billingPeriod] as [AnyHashable],
             onPrimary: save
         ) {
             FormCard(title: "Amount due", symbol: "banknote") {

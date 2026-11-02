@@ -3,24 +3,39 @@ import PhotosUI
 import UIKit
 
 enum LogoProcessing {
-    /// Crops an image to a square and shrinks it, so logos stay small to store and sync.
+    /// Shrinks an image so logos stay small to store and sync. The whole logo is kept, with its own
+    /// shape and transparency: nothing is cropped, and no background is added.
     static func squareLogoData(from data: Data, side: CGFloat = 256) -> Data? {
-        guard let image = UIImage(data: data) else { return nil }
-        let size = CGSize(width: side, height: side)
+        guard let image = UIImage(data: data), image.size.width > 0, image.size.height > 0 else { return nil }
+        // Fit the longest side to `side`, but never enlarge a small image.
+        let scale = min(1, side / max(image.size.width, image.size.height))
+        let size = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
-        let renderer = UIGraphicsImageRenderer(size: size, format: format)
-        let rendered = renderer.image { _ in
-            // Scale to fill the square, centred, then let the renderer crop the overflow.
-            let scale = max(side / image.size.width, side / image.size.height)
-            let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
-            image.draw(in: CGRect(
-                x: (side - drawn.width) / 2, y: (side - drawn.height) / 2,
-                width: drawn.width, height: drawn.height
-            ))
+        format.opaque = false   // keeps transparent areas transparent
+        let rendered = UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
         }
         // PNG keeps the transparency of logos that have it.
         return rendered.pngData()
+    }
+}
+
+/// Decoded logos, kept so a list doesn't decode every picture again each time it redraws.
+enum LogoImageCache {
+    private static let cache = NSCache<NSString, UIImage>()
+
+    static func image(for data: Data) -> UIImage? {
+        // A cheap key: the size and a few bytes from each end. Logos are small PNGs, so this tells
+        // different pictures apart without reading all of the data.
+        let key = "\(data.count)-\(data.prefix(24).hashValue)-\(data.suffix(24).hashValue)" as NSString
+        if let cached = cache.object(forKey: key) { return cached }
+        guard let image = UIImage(data: data) else { return nil }
+        // Decode now, on first use, rather than while scrolling.
+        let prepared = image.preparingForDisplay() ?? image
+        cache.setObject(prepared, forKey: key)
+        return prepared
     }
 }
 
@@ -33,12 +48,13 @@ struct LogoBadge: View {
 
     var body: some View {
         Group {
-            if let logo, let image = UIImage(data: logo) {
+            if let logo, let image = LogoImageCache.image(for: logo) {
+                // The logo as it is: fitted, never cropped, with no background behind it, so a
+                // transparent PNG stays transparent.
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFill()
+                    .scaledToFit()
                     .frame(width: size, height: size)
-                    .background(Color.white)
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: size * 0.45, weight: .semibold))

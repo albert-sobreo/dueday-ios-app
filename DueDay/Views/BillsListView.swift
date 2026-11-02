@@ -9,16 +9,35 @@ struct BillsListView: View {
     @AppStorage(selectedProfileKey) private var selectedProfileID = ""
     @State private var accountToAddBill: Bill?
     @State private var billToDelete: Bill?
+    /// Starts on the current cutoff, the first chip. A profile without paydays falls back to All.
+    @State private var filter: BillFilter = .currentCutoff
 
-    private var inProfile: [Bill] { bills.filter { $0.isIn(profileID: selectedProfileID) } }
-    private var active: [Bill] { inProfile.filter { !$0.isArchived } }
-    private var archived: [Bill] { inProfile.filter(\.isArchived) }
+    @Query(sort: \BillInstance.dueDate) private var instances: [BillInstance]
+    @Query(sort: \Profile.sortOrder) private var profiles: [Profile]
+
+    /// Worked out once per refresh and shared with the filter bar and the list, because reading every
+    /// bill's data is what makes this tab slow.
+    private func makeEngine(activeBills: [Bill]) -> BillFilterEngine {
+        let activeIDs = Set(activeBills.map(\.persistentModelID))
+        return BillFilterEngine(
+            instances: instances.filter { instance in
+                instance.bill.map { activeIDs.contains($0.persistentModelID) } ?? false
+            },
+            paydays: profiles.first { $0.id.uuidString == selectedProfileID }?.paydays ?? []
+        )
+    }
 
     var body: some View {
+        let inProfile = bills.filter { $0.isIn(profileID: selectedProfileID) }
+        let active = inProfile.filter { !$0.isArchived }
+        let archived = inProfile.filter(\.isArchived)
+        // Only built when it's needed: for the filter chips and the lists of bills.
+        let engine = makeEngine(activeBills: active)
+
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 Text("BILLS")
-                    .font(.barlow(60, relativeTo: .largeTitle))
+                    .font(.barlow(60, weight: .medium, relativeTo: .largeTitle))
                     .foregroundStyle(Theme.ink)
 
                 if inProfile.isEmpty {
@@ -29,21 +48,31 @@ struct BillsListView: View {
                     )
                 }
 
-                // What's still unpaid, by cutoff.
                 if !inProfile.isEmpty {
-                    UnpaidByCutoffView(selectedProfileID: selectedProfileID)
-                    Text("ALL ACCOUNTS")
-                        .font(.barlow(30, relativeTo: .title))
-                        .foregroundStyle(Theme.ink)
-                        .padding(.bottom, -12)
+                    BillFilterBar(selection: $filter, selectedProfileID: selectedProfileID, engine: engine)
                 }
 
-                ForEach(BillCategory.allCases) { category in
-                    let items = active.filter { $0.category == category }
-                    if !items.isEmpty { section(category.title, items) }
+                // What's still unpaid: the full overview, or just the list for the chosen filter.
+                if !inProfile.isEmpty, filter != .accounts {
+                    UnpaidByCutoffView(selectedProfileID: selectedProfileID, filter: filter, engine: engine)
                 }
 
-                if !archived.isEmpty { section("Archived", archived) }
+                // The saved accounts, by category. Shown under "All" and "Accounts".
+                if filter == .all || filter == .accounts {
+                    if !inProfile.isEmpty {
+                        Text("ALL ACCOUNTS")
+                            .font(.barlow(30, relativeTo: .title))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.bottom, -12)
+                    }
+
+                    ForEach(BillCategory.allCases) { category in
+                        let items = active.filter { $0.category == category }
+                        if !items.isEmpty { section(category.title, items) }
+                    }
+
+                    if !archived.isEmpty { section("Archived", archived) }
+                }
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 8)
@@ -51,7 +80,7 @@ struct BillsListView: View {
         }
         .background(Theme.background)
         .navigationDestination(for: Bill.self) { BillDetailView(bill: $0) }
-        .toolbar(.hidden, for: .navigationBar)
+        .ownsTopOfScreen()
         .overlay(alignment: .topTrailing) {
             // Same floating profile button as on Today.
             ProfileSwitcher(selectedID: $selectedProfileID)
@@ -107,7 +136,7 @@ private struct BillCard: View {
 
     private var subtitle: String {
         var parts: [String] = []
-        if let account = bill.maskedAccountNumber { parts.append("ACCT \(account)") }
+        if let account = bill.maskedAccountNumber { parts.append(account) }
         if bill.amountType == .variable {
             parts.append("Variable")
         } else if bill.recurrence == .once {
@@ -119,6 +148,8 @@ private struct BillCard: View {
     }
 
     var body: some View {
+        // Found once: it reads all of this account's bills.
+        let next = next
         HStack(spacing: 12) {
             LogoBadge(logo: bill.logoData, symbol: bill.displayIcon, color: bill.displayColor, size: 44)
 
@@ -134,7 +165,7 @@ private struct BillCard: View {
 
             Spacer(minLength: 8)
 
-            trailing
+            trailing(next: next)
         }
         .padding(14)
         .glassSurface(cornerRadius: 18)
@@ -143,7 +174,7 @@ private struct BillCard: View {
     }
 
     @ViewBuilder
-    private var trailing: some View {
+    private func trailing(next: BillInstance?) -> some View {
         if bill.isArchived {
             StatusChip(text: "ARCHIVED", foreground: Theme.mutedInk, background: Theme.track)
         } else if let next {

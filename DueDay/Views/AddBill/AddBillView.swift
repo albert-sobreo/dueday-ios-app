@@ -1,6 +1,18 @@
 import SwiftUI
 import SwiftData
 
+private extension View {
+    /// The system search field for the Add tab. Nothing when this screen is a sheet.
+    @ViewBuilder
+    func searchInTab(_ text: Binding<String>?) -> some View {
+        if let text {
+            self.searchable(text: text, prompt: "Meralco, PLDT, SSS…")
+        } else {
+            self
+        }
+    }
+}
+
 /// Step 1 of 2: pick a saved account, a biller, or a custom bill.
 /// Works as a sheet, or as the content of the tab bar's search tab (when `externalSearch` is given).
 struct AddBillView: View {
@@ -20,6 +32,7 @@ struct AddBillView: View {
     @State private var showingCustom = false
     @State private var isEditingProviders = false
     @State private var providerToEdit: CustomProvider?
+    @State private var scanDraft: ScanDraft?
 
     private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
 
@@ -75,6 +88,7 @@ struct AddBillView: View {
                     }
                 }
             }
+            .searchInTab(externalSearch)
             .sheet(item: $providerToEdit) { ProviderEditSheet(provider: $0) }
             .navigationDestination(item: $accountChoice) { account in
                 AddBillEntryForm(bill: account, onSaved: finish)
@@ -85,13 +99,17 @@ struct AddBillView: View {
             .navigationDestination(isPresented: $showingCustom) {
                 NewAccountView(preset: nil, defaultProfileID: defaultProfileID, onDone: finish)
             }
+            .navigationDestination(item: $scanDraft) { draft in
+                ScanBillView(draft: draft, defaultProfileID: defaultProfileID, onDone: finish)
+            }
         }
     }
 
-    /// Leaves the add flow once a bill was added: back to the picker, search cleared.
+    /// Leaves the add flow once a bill was added: back to the picker, the search cleared, and any scan dropped.
     private func finish() {
         accountChoice = nil
         presetChoice = nil
+        scanDraft = nil
         showingCustom = false
         searchBinding.wrappedValue = ""
         if let onFinish { onFinish() } else { dismiss() }
@@ -131,34 +149,12 @@ struct AddBillView: View {
 
             DashedDivider(color: Theme.addStrong.opacity(0.4))
 
-            // Scanning arrives in phase 2, so these are shown but not active yet.
-            HStack(spacing: 12) {
-                actionTile("Scan paper bill", "Camera fills it in", symbol: "doc.viewfinder")
-                actionTile("Import e-bill", "PDF or screenshot", symbol: "square.and.arrow.down")
-            }
+            // Read a bill with the camera, or from a PDF or screenshot, all on the device.
+            ScanTiles { scanDraft = $0 }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 24)
         .background { Theme.addTint.padding(.top, -400) }
-    }
-
-    private func actionTile(_ title: String, _ subtitle: String, symbol: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Image(systemName: symbol).font(.title3)
-                Spacer()
-                StatusChip(text: "SOON", foreground: Theme.addStrong, background: Theme.addStrong.opacity(0.12))
-            }
-            Text(title).font(.outfit(16, weight: .semibold))
-            Text(subtitle).font(.outfit(13)).foregroundStyle(Theme.ink.opacity(0.8))
-        }
-        .foregroundStyle(Theme.addStrong)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .glassSurface(cornerRadius: 16)
-        .opacity(0.65)
-        .accessibilityElement(children: .combine)
-        .accessibilityHint("Coming soon")
     }
 
     // MARK: Sections

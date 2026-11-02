@@ -6,7 +6,7 @@ struct AddBillEntryForm: View {
     let bill: Bill
     /// True when shown as a sheet (with a Cancel pill) rather than pushed in the add flow.
     var isSheet = false
-    var onCancel: () -> Void = {}
+    var onCancel: (() -> Void)?
     let onSaved: () -> Void
 
     @Environment(\.modelContext) private var modelContext
@@ -23,7 +23,8 @@ struct AddBillEntryForm: View {
             showsCancel: isSheet,
             primaryTitle: "Add bill",
             primaryEnabled: (amount ?? 0) > 0,
-            onCancel: onCancel,
+            onCancel: isSheet ? onCancel : nil,
+            changeToken: [amountText, dueDate, billingPeriod] as [AnyHashable],
             onPrimary: save
         ) {
             FormCard(title: "Account", symbol: "person.text.rectangle") {
@@ -35,7 +36,7 @@ struct AddBillEntryForm: View {
                     VStack(alignment: .leading, spacing: 1) {
                         Text(bill.name).font(.outfit(17, weight: .semibold)).foregroundStyle(Theme.ink)
                         if let account = bill.maskedAccountNumber {
-                            Text("ACCT \(account)").font(.outfit(13)).foregroundStyle(Theme.mutedInk)
+                            Text(account).font(.outfit(13)).foregroundStyle(Theme.mutedInk)
                         }
                     }
                 }

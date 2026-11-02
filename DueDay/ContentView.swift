@@ -18,33 +18,45 @@ struct ContentView: View {
         // bubble at the trailing edge. Here it holds "Add a bill", and the search field the system
         // shows for it filters the billers.
         TabView(selection: $selection) {
-            Tab("Today", systemImage: "house", value: AppTab.today) {
+            // Icons only. The names stay as accessibility labels for VoiceOver.
+            Tab(value: AppTab.today) {
                 NavigationStack { TodayView() }
+            } label: {
+                Image(systemName: "house").accessibilityLabel("Today")
             }
 
-            Tab("Month", systemImage: "calendar", value: AppTab.month) {
-                NavigationStack { MonthView() }
-            }
-
-            Tab("Bills", systemImage: "list.bullet", value: AppTab.bills) {
+            Tab(value: AppTab.bills) {
                 NavigationStack { BillsListView() }
+            } label: {
+                Image(systemName: "list.bullet").accessibilityLabel("Bills")
             }
 
-            Tab("Settings", systemImage: "gearshape", value: AppTab.settings) {
+            Tab(value: AppTab.month) {
+                NavigationStack { MonthView() }
+            } label: {
+                Image(systemName: "calendar").accessibilityLabel("Month")
+            }
+
+            Tab(value: AppTab.settings) {
                 NavigationStack { SettingsView() }
+            } label: {
+                Image(systemName: "gearshape").accessibilityLabel("Settings")
             }
 
-            Tab("Add", systemImage: "plus", value: AppTab.add, role: .search) {
+            Tab(value: AppTab.add, role: .search) {
                 AddBillView(
                     defaultProfileID: selectedProfileID,
                     externalSearch: $addSearchText,
                     onFinish: { selection = lastContentTab }
                 )
+            } label: {
+                Image(systemName: "plus").accessibilityLabel("Add a bill")
             }
         }
         .id(currencyCode)
         .tint(Theme.tabTint)
-        .searchable(text: $addSearchText, prompt: "Meralco, PLDT, SSS…")
+        // The search field itself is on the Add screen, not here: put on the whole tab view, it
+        // also showed up in every sheet, such as Profiles.
         .searchActivatesOnSelection()
         .onChange(of: selection) { _, newValue in
             if newValue != .add { lastContentTab = newValue }

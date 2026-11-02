@@ -11,6 +11,15 @@ struct TodayView: View {
     @State private var billToView: Bill?
     @State private var instanceToDelete: BillInstance?
     @State private var showingNewBill = false
+    @State private var showingCustomBill = false
+    @State private var quickPreset: BillPreset?
+    @State private var scannedBill: QuickScan?
+
+    /// A scan from the quick start, waiting to be checked.
+    private struct QuickScan: Identifiable {
+        let id = UUID()
+        let draft: ScanDraft
+    }
 
     private var now: Date { .now }
 
@@ -23,9 +32,10 @@ struct TodayView: View {
 
     private var unpaid: [BillInstance] { visible.filter { !$0.isPaid } }
 
-    /// The nearest bill that is due today or later. If everything is overdue, the oldest overdue one.
+    /// The most urgent bill: the oldest overdue one if there is any, otherwise the nearest one due.
+    /// `unpaid` is sorted by due date, so the first item is the right one either way.
     private var hero: BillInstance? {
-        unpaid.first { $0.status() != .overdue } ?? unpaid.first
+        unpaid.first
     }
 
     /// Paydays only make sense for a single profile; "All" mixes different schedules.
@@ -42,9 +52,28 @@ struct TodayView: View {
         currentCutoff.map { CutoffSummary(cutoff: $0, instances: visible) }
     }
 
+    /// What Home lists: every overdue bill, plus each bill's next one coming due in the next 30 days.
+    /// The app generates a few months of repeating bills ahead, but only the next one of each is shown,
+    /// so Home doesn't fill up with future months. The Month and Bills screens show the rest.
+    private var homeUnpaid: [BillInstance] {
+        let horizon = Calendar.current.date(byAdding: .day, value: 30, to: Calendar.current.startOfDay(for: now)) ?? now
+        var billsAlreadyShown = Set<UUID>()
+        // The hero stands for its bill, so that bill's later months aren't repeated.
+        if let hero, hero.status() != .overdue, let id = hero.bill?.id { billsAlreadyShown.insert(id) }
+
+        // `unpaid` is sorted by due date, so the first one found for a bill is its next one.
+        return unpaid.filter { instance in
+            if instance.status() == .overdue { return true }
+            guard instance.dueDate <= horizon else { return false }
+            if instance.id == hero?.id { return true }
+            guard let id = instance.bill?.id else { return true }
+            return billsAlreadyShown.insert(id).inserted
+        }
+    }
+
     /// Other unpaid bills due in the same cutoff as the hero. Without paydays, the next few bills due.
     private var alsoThisCutoff: [BillInstance] {
-        let others = unpaid.filter { $0.id != hero?.id && $0.status() != .overdue }
+        let others = homeUnpaid.filter { $0.id != hero?.id && $0.status() != .overdue }
         if let cutoff = currentCutoff {
             return Array(others.filter { cutoff.contains($0.dueDate) }.prefix(3))
         }
@@ -54,7 +83,7 @@ struct TodayView: View {
     /// Overdue bills first, then everything else not already shown above.
     private var upcoming: [BillInstance] {
         let shown = Set(([hero].compactMap { $0 } + alsoThisCutoff).map(\.id))
-        return unpaid.filter { !shown.contains($0.id) }
+        return homeUnpaid.filter { !shown.contains($0.id) }
             .sorted { lhs, rhs in
                 let l = lhs.status() == .overdue, r = rhs.status() == .overdue
                 return l != r ? l : lhs.dueDate < rhs.dueDate
@@ -83,14 +112,19 @@ struct TodayView: View {
                         onDelete: { instanceToDelete = hero }
                     )
                 } else {
-                    EmptyHero(
-                        hasBills: !visible.isEmpty,
-                        onAdd: { showingNewBill = true },
-                        onLoadSamples: loadSamples
-                    )
+                    EmptyHero(hasBills: !visible.isEmpty)
                 }
 
                 VStack(alignment: .leading, spacing: 24) {
+                    // A fresh start: the quickest ways to add a first bill.
+                    if visible.isEmpty {
+                        QuickStartSection(
+                            onPreset: { quickPreset = $0 },
+                            onCustom: { showingCustomBill = true },
+                            onScan: { scannedBill = QuickScan(draft: $0) },
+                            onBrowse: { showingNewBill = true }
+                        )
+                    }
                     if let summary = cutoffSummary, summary.count > 0 {
                         CutoffCard(summary: summary)
                     }
@@ -140,12 +174,30 @@ struct TodayView: View {
         .sheet(isPresented: $showingNewBill) {
             AddBillView(defaultProfileID: selectedProfileID)
         }
-    }
-
-    private func loadSamples() {
-        #if DEBUG
-        SampleData.populate(in: modelContext)
-        #endif
+        .sheet(item: $quickPreset) { preset in
+            NavigationStack {
+                NewAccountView(
+                    preset: preset, defaultProfileID: selectedProfileID,
+                    onDone: { quickPreset = nil }, onCancel: { quickPreset = nil }
+                )
+            }
+        }
+        .sheet(isPresented: $showingCustomBill) {
+            NavigationStack {
+                NewAccountView(
+                    preset: nil, defaultProfileID: selectedProfileID,
+                    onDone: { showingCustomBill = false }, onCancel: { showingCustomBill = false }
+                )
+            }
+        }
+        .sheet(item: $scannedBill) { scan in
+            NavigationStack {
+                ScanBillView(
+                    draft: scan.draft, defaultProfileID: selectedProfileID,
+                    onDone: { scannedBill = nil }, onCancel: { scannedBill = nil }
+                )
+            }
+        }
     }
 
     /// Always opens the Mark as paid sheet, so you can confirm the amount, date and payment method.
@@ -374,33 +426,107 @@ private struct AlsoRow: View {
 
 private struct EmptyHero: View {
     let hasBills: Bool
-    let onAdd: () -> Void
-    var onLoadSamples: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
+            Eyebrow(hasBills ? "You're all set" : "Let's get started", color: Theme.todayStrong)
+                .padding(.top, 8)
             Text(hasBills ? "ALL CAUGHT UP" : "WELCOME TO DUEDAY")
-                .font(.barlow(44, relativeTo: .largeTitle))
+                .font(.barlow(54, weight: .medium, relativeTo: .largeTitle))
                 .foregroundStyle(Theme.todayStrong)
-            Text(hasBills ? "No unpaid bills right now." : "Add your first bill and we'll remind you before it's due.")
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+            Text(hasBills ? "No unpaid bills right now." : "Add your first bill and we'll remind you before it's due. Everything stays on your phone.")
                 .font(.outfit(16))
                 .foregroundStyle(Theme.ink)
-            if !hasBills {
-                Button("Add a bill", systemImage: "plus", action: onAdd)
-                    .font(.outfit(16, weight: .semibold))
-                    .primaryButton()
-                #if DEBUG
-                Button("Load sample bills", action: onLoadSamples)
-                    .font(.outfit(14, weight: .medium))
-                    .foregroundStyle(Theme.todayStrong)
-                #endif
-            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 24)
         .padding(.bottom, 32)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .background(alignment: .topTrailing) {
+            // A faded icon behind the text, like the day number on a real bill.
+            Color.clear.overlay(alignment: .topTrailing) {
+                Image(systemName: "calendar.badge.plus")
+                    .font(.system(size: 180, weight: .bold))
+                    .foregroundStyle(Theme.todayStrong.opacity(0.08))
+                    .offset(x: 30, y: 10)
+            }
+            .clipped()
+            .accessibilityHidden(true)
+        }
         .background { Theme.todayTint.padding(.top, -400) }
+    }
+}
+
+// MARK: - Quick start
+
+/// What Home shows below the welcome until there's a first bill: scan or import one, pick a common
+/// biller, or start from scratch.
+private struct QuickStartSection: View {
+    let onPreset: (BillPreset) -> Void
+    let onCustom: () -> Void
+    let onScan: (ScanDraft) -> Void
+    let onBrowse: () -> Void
+
+    /// Common billers to start from; falls back to the first few if the list changes.
+    private var popular: [BillPreset] {
+        let wanted = ["meralco", "maynilad", "pldt", "converge", "globe", "rent"]
+        let found = wanted.compactMap { id in PresetStore.all.first { $0.id == id } }
+        return found.count >= 4 ? found : Array(PresetStore.all.prefix(6))
+    }
+
+    private let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("ADD YOUR FIRST BILL")
+                .font(.barlow(30, relativeTo: .title))
+                .foregroundStyle(Theme.ink)
+
+            ScanTiles(onResult: onScan)
+
+            Eyebrow("Or pick a biller")
+            LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(popular) { preset in
+                    Button { onPreset(preset) } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: preset.icon)
+                                .font(.body.weight(.semibold))
+                                .foregroundStyle(preset.color)
+                                .frame(width: 28)
+                            Text(preset.name)
+                                .font(.outfit(15, weight: .semibold))
+                                .foregroundStyle(Theme.ink)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
+                            Spacer(minLength: 0)
+                        }
+                        .padding(.horizontal, 14)
+                        .frame(maxWidth: .infinity, minHeight: 52)
+                        .glassSurface(cornerRadius: 16)
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button(action: onCustom) {
+                    Label("Custom bill", systemImage: "square.and.pencil")
+                        .font(.outfit(16, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .primaryButton()
+
+                Button(action: onBrowse) {
+                    Label("All billers", systemImage: "list.bullet")
+                        .font(.outfit(16, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                }
+                .secondaryButton(tint: Theme.todayStrong)
+            }
+        }
     }
 }
 

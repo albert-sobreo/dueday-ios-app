@@ -43,6 +43,11 @@ struct EditBillView: View {
             primaryTitle: "Save",
             primaryEnabled: canSave,
             onCancel: { dismiss() },
+            changeToken: [
+                name, accountNumber, amountText, colorHex, profile?.id, category, recurrence, interval,
+                startDate, weekendRule, reminderOffsets.sorted(), paymentMethod?.title, logoData,
+                nudgeEnabled, expectedDay,
+            ] as [AnyHashable?],
             onPrimary: save
         ) {
             if profiles.count > 1 { profileCard }
@@ -106,6 +111,7 @@ struct EditBillView: View {
                 ChipGrid(
                     options: BillCategory.allCases,
                     selected: $category,
+                    leadingAligned: true,
                     title: { $0.title },
                     symbol: { $0.symbol }
                 )

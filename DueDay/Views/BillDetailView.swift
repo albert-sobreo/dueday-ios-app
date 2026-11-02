@@ -13,7 +13,16 @@ struct BillDetailView: View {
     @State private var showingAddEntry = false
     @State private var instanceToPay: BillInstance?
     @State private var instanceToEdit: BillInstance?
+    @State private var scanUpdate: ScanUpdate?
+    @State private var scannedNewBill: NewScan?
+    @State private var instanceToDelete: BillInstance?
     @State private var deleteWhenClosed = false
+
+    /// A scan waiting to become a new bill on this account.
+    private struct NewScan: Identifiable {
+        let id = UUID()
+        let draft: ScanDraft
+    }
 
     /// The header follows the bill's own colour; bills without one keep the default peach.
     private var strong: Color { bill.accentHex.map(Color.strongText(hex:)) ?? Theme.detailStrong }
@@ -52,10 +61,36 @@ struct BillDetailView: View {
                         Button("Edit This Bill", systemImage: "pencil") { instanceToEdit = current }
                     }
                     Button("Edit Account", systemImage: "gearshape") { showingEdit = true }
+                    // Only variable accounts: a fixed bill would just be generated again.
+                    if isVariable, let current {
+                        Divider()
+                        Button("Delete This Bill", systemImage: "trash", role: .destructive) {
+                            instanceToDelete = current
+                        }
+                    }
                 }
             }
         }
+        .confirmationDialog(
+            "Delete this bill?",
+            isPresented: Binding(get: { instanceToDelete != nil }, set: { if !$0 { instanceToDelete = nil } }),
+            titleVisibility: .visible,
+            presenting: instanceToDelete
+        ) { instance in
+            Button("Delete Bill", role: .destructive) { delete(instance) }
+        } message: { instance in
+            Text("The \(instance.dueDate.formatted(.dateTime.month(.wide).day())) bill\(instance.isPaid ? " and its payment" : "") will be removed. \(bill.name) stays.")
+        }
         .sheet(item: $instanceToEdit) { EditInstanceSheet(instance: $0) }
+        .sheet(item: $scanUpdate) { ScanUpdateSheet(update: $0) }
+        .sheet(item: $scannedNewBill) { scan in
+            NavigationStack {
+                ScanBillView(
+                    draft: scan.draft, fixedAccount: bill,
+                    onDone: { scannedNewBill = nil }, onCancel: { scannedNewBill = nil }
+                )
+            }
+        }
         .sheet(isPresented: $showingEdit) {
             EditBillView(bill: bill) {
                 // Delete after this screen is gone, so nothing reads a deleted bill.
@@ -67,6 +102,17 @@ struct BillDetailView: View {
         .sheet(item: $instanceToPay) { MarkPaidSheet(instance: $0) }
         .onDisappear {
             if deleteWhenClosed { modelContext.delete(bill) }
+        }
+    }
+
+    /// Removes one bill (and its payments) from a variable account, and drops its reminders.
+    private func delete(_ instance: BillInstance) {
+        modelContext.delete(instance)
+        instanceToDelete = nil
+        let context = modelContext
+        Task {
+            try? context.save()
+            await ReminderScheduler.reschedule(in: context)
         }
     }
 
@@ -123,19 +169,29 @@ struct BillDetailView: View {
                 Text("No bill yet")
                     .font(.barlow(34, weight: .medium, relativeTo: .title))
                     .foregroundStyle(strong)
-                addBillButton
+                if isVariable { newBillButtons }
             }
         }
         .padding(.horizontal, 20)
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(alignment: .topTrailing) {
-            // Faded icon behind the header, clipped to it.
+            // Faded watermark behind the header, clipped to it: the uploaded logo if there is one,
+            // otherwise the bill's icon.
             Color.clear.overlay(alignment: .topTrailing) {
-                Image(systemName: bill.displayIcon)
-                    .font(.system(size: 220, weight: .bold))
-                    .foregroundStyle(strong.opacity(0.08))
-                    .offset(x: 40, y: 10)
+                if let logo = bill.logoData, let image = UIImage(data: logo) {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 300, height: 300)
+                        .opacity(0.14)
+                        .offset(x: 70, y: 40)
+                } else {
+                    Image(systemName: bill.displayIcon)
+                        .font(.system(size: 220, weight: .bold))
+                        .foregroundStyle(strong.opacity(0.08))
+                        .offset(x: 40, y: 10)
+                }
             }
             .clipped()
             .accessibilityHidden(true)
@@ -145,7 +201,7 @@ struct BillDetailView: View {
 
     private var subtitle: String {
         var parts: [String] = []
-        if let account = bill.maskedAccountNumber { parts.append("ACCT \(account)") }
+        if let account = bill.maskedAccountNumber { parts.append(account) }
         parts.append(bill.category.title)
         return parts.joined(separator: " · ").uppercased()
     }
@@ -209,14 +265,14 @@ struct BillDetailView: View {
     @ViewBuilder
     private func actions(for instance: BillInstance) -> some View {
         if instance.isPaid {
-            HStack(spacing: 12) {
+            VStack(spacing: 12) {
                 Label("Paid", systemImage: "checkmark.circle.fill")
                     .font(.outfit(16, weight: .semibold))
                     .foregroundStyle(Theme.paid)
                     .frame(maxWidth: .infinity, minHeight: 28)
                     .padding(.vertical, 8)
                     .background(Theme.paidFill, in: .capsule)
-                if isVariable { addBillButton }
+                if isVariable { newBillButtons }
             }
         } else {
             HStack(spacing: 12) {
@@ -227,27 +283,33 @@ struct BillDetailView: View {
                 }
                 .primaryButton()
 
-                // Scanning arrives in phase 2.
-                Button {} label: {
+                // Scan this month's bill to fill in its amount, due date and billing period.
+                ScanMenu(onResult: { scanUpdate = ScanUpdate(instance: instance, draft: $0) }) {
                     Label("Scan bill", systemImage: "doc.viewfinder")
                         .font(.outfit(16, weight: .semibold))
                         .frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .secondaryButton(tint: strong)
-                .disabled(true)
             }
         }
     }
 
-    @ViewBuilder
-    private var addBillButton: some View {
-        if isVariable {
+    /// For a variable account with no open bill: type the next bill in, or scan it.
+    private var newBillButtons: some View {
+        HStack(spacing: 12) {
             Button { showingAddEntry = true } label: {
                 Label("Add a bill", systemImage: "plus")
                     .font(.outfit(16, weight: .semibold))
                     .frame(maxWidth: .infinity, minHeight: 28)
             }
             .primaryButton()
+
+            ScanMenu(onResult: { scannedNewBill = NewScan(draft: $0) }) {
+                Label("Scan bill", systemImage: "doc.viewfinder")
+                    .font(.outfit(16, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 28)
+            }
+            .secondaryButton(tint: strong)
         }
     }
 
@@ -371,7 +433,8 @@ struct BillDetailView: View {
         guard let due = current?.dueDate, current?.isPaid == false else { return "Sent once a bill is added" }
         let calendar = Calendar.current
         let day = calendar.date(byAdding: .day, value: -daysBefore, to: due) ?? due
-        let at9 = calendar.date(bySettingHour: 9, minute: 0, second: 0, of: day) ?? day
+        // The reminder time is set in Settings (9:00 AM by default).
+        let at9 = ReminderSettings.date(on: day, calendar: calendar)
         return at9.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute())
             .replacingOccurrences(of: " at ", with: " · ")
     }
@@ -418,6 +481,14 @@ struct BillDetailView: View {
                     )
                 }
                 .accessibilityElement(children: .combine)
+                .contentShape(.rect)
+                .contextMenu {
+                    if isVariable {
+                        Button("Delete This Bill", systemImage: "trash", role: .destructive) {
+                            instanceToDelete = instance
+                        }
+                    }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

@@ -35,9 +35,28 @@ struct FormScreen<Content: View>: View {
     var showsCancel = true
     let primaryTitle: String
     var primaryEnabled = true
-    var onCancel: () -> Void = {}
+    /// Closes the form. A pushed form leaves this nil and uses the back button; a form at the root of a
+    /// sheet passes it to get a Cancel button in the navigation bar.
+    var onCancel: (() -> Void)?
+    /// Everything the person can edit, as one value. Once it differs from how the form started, the
+    /// form counts as changed: swiping it away is blocked and Cancel asks first. Leave it out for
+    /// forms with nothing worth protecting.
+    var changeToken: AnyHashable?
     let onPrimary: () -> Void
     @ViewBuilder let content: () -> Content
+
+    @State private var baseline: AnyHashable?
+    @State private var confirmingDiscard = false
+
+    private var hasChanges: Bool {
+        guard let changeToken, let baseline else { return false }
+        return changeToken != baseline
+    }
+
+    /// Cancel, after checking that nothing would be lost.
+    private func requestCancel() {
+        if hasChanges { confirmingDiscard = true } else { onCancel?() }
+    }
 
     var body: some View {
         ScrollView {
@@ -55,6 +74,26 @@ struct FormScreen<Content: View>: View {
         .navigationTitle(showsCancel ? "" : title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar(showsCancel ? .hidden : .automatic, for: .navigationBar)
+        .toolbar {
+            if !showsCancel, onCancel != nil {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel", action: requestCancel)
+                }
+            }
+        }
+        .interactiveDismissDisabled(hasChanges)
+        // Forms fill in their starting values as they appear, so take the starting point just after.
+        .task(id: changeToken == nil) {
+            guard changeToken != nil else { return }
+            try? await Task.sleep(for: .milliseconds(500))
+            baseline = changeToken
+        }
+        .confirmationDialog("Discard your changes?", isPresented: $confirmingDiscard, titleVisibility: .visible) {
+            Button("Discard Changes", role: .destructive) { onCancel?() }
+            Button("Keep Editing", role: .cancel) {}
+        } message: {
+            Text("What you've entered here won't be saved.")
+        }
     }
 
     private var sheetHeader: some View {
@@ -63,7 +102,7 @@ struct FormScreen<Content: View>: View {
                 .font(.outfit(18, weight: .semibold, relativeTo: .headline))
                 .foregroundStyle(Theme.ink)
             HStack {
-                Button(action: onCancel) {
+                Button(action: requestCancel) {
                     Text("Cancel")
                         .font(.outfit(16, weight: .medium))
                         .padding(.horizontal, 6)
@@ -178,6 +217,8 @@ struct ChipGrid<Value: Hashable>: View {
     let options: [Value]
     @Binding var selection: Value?
     var columns = 2
+    /// Left-aligns each chip's icon and label instead of centring them.
+    var leadingAligned = false
     let title: (Value) -> String
     var symbol: (Value) -> String? = { _ in nil }
 
@@ -185,12 +226,14 @@ struct ChipGrid<Value: Hashable>: View {
         options: [Value],
         selection: Binding<Value?>,
         columns: Int = 2,
+        leadingAligned: Bool = false,
         title: @escaping (Value) -> String,
         symbol: @escaping (Value) -> String? = { _ in nil }
     ) {
         self.options = options
         self._selection = selection
         self.columns = columns
+        self.leadingAligned = leadingAligned
         self.title = title
         self.symbol = symbol
     }
@@ -200,6 +243,7 @@ struct ChipGrid<Value: Hashable>: View {
         options: [Value],
         selected: Binding<Value>,
         columns: Int = 2,
+        leadingAligned: Bool = false,
         title: @escaping (Value) -> String,
         symbol: @escaping (Value) -> String? = { _ in nil }
     ) {
@@ -207,6 +251,7 @@ struct ChipGrid<Value: Hashable>: View {
             options: options,
             selection: Binding(get: { selected.wrappedValue }, set: { if let value = $0 { selected.wrappedValue = value } }),
             columns: columns,
+            leadingAligned: leadingAligned,
             title: title,
             symbol: symbol
         )
@@ -215,7 +260,10 @@ struct ChipGrid<Value: Hashable>: View {
     var body: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: columns), spacing: 8) {
             ForEach(options, id: \.self) { option in
-                OptionChip(title: title(option), symbol: symbol(option), isSelected: selection == option) {
+                OptionChip(
+                    title: title(option), symbol: symbol(option),
+                    leadingAligned: leadingAligned, isSelected: selection == option
+                ) {
                     selection = selection == option ? nil : option
                 }
             }

@@ -29,6 +29,7 @@ struct ProviderEditSheet: View {
             primaryTitle: "Save",
             primaryEnabled: !name.trimmingCharacters(in: .whitespaces).isEmpty,
             onCancel: { dismiss() },
+            changeToken: [name, category, amountType, accountNumberLabel, colorHex, logoData] as [AnyHashable?],
             onPrimary: save
         ) {
             FormCard(
@@ -45,6 +46,7 @@ struct ProviderEditSheet: View {
                     ChipGrid(
                         options: BillCategory.allCases,
                         selected: $category,
+                        leadingAligned: true,
                         title: { $0.title },
                         symbol: { $0.symbol }
                     )

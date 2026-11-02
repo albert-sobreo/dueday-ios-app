@@ -1,119 +1,162 @@
 import SwiftUI
 import SwiftData
 
-/// Unpaid bills grouped by cutoff: what's overdue, what's left in the current cutoff, and what's
-/// coming in the next ones. Used at the top of the Bills tab.
+/// The bills section at the top of the Bills tab. With the "All" filter it's the full overview:
+/// what's overdue, then each cutoff. With any other filter it shows just that list.
 struct UnpaidByCutoffView: View {
     let selectedProfileID: String
+    var filter: BillFilter = .all
 
-    @Query(sort: \BillInstance.dueDate) private var instances: [BillInstance]
-    @Query(sort: \Profile.sortOrder) private var profiles: [Profile]
+    /// Made once by the Bills tab and shared with the filter bar.
+    let engine: BillFilterEngine
 
-    private var calendar: Calendar { .current }
+    /// One titled list of bills, with its total.
+    private struct Group {
+        let title: String
+        var tint: Color?
+        let items: [BillInstance]
+        var emptyText: String?
+    }
 
     // MARK: Data
-
-    private var unpaid: [BillInstance] {
-        instances.filter {
-            !$0.isPaid && $0.bill?.isArchived != true && ($0.bill?.isIn(profileID: selectedProfileID) ?? false)
-        }
-    }
-
-    private var overdue: [BillInstance] { unpaid.filter { $0.status() == .overdue } }
-    private var upcoming: [BillInstance] { unpaid.filter { $0.status() != .overdue } }
-
-    private var paydays: [Int] {
-        profiles.first { $0.id.uuidString == selectedProfileID }?.paydays ?? []
-    }
-
-    /// The cutoff we're in, then the following ones, oldest first.
-    private var cutoffs: [Cutoff] {
-        guard !paydays.isEmpty else { return [] }
-        let today = calendar.startOfDay(for: .now)
-        var seen = Set<Date>()
-        var result: [Cutoff] = []
-        for offset in 0...3 {
-            guard let month = calendar.date(byAdding: .month, value: offset, to: today) else { continue }
-            for cutoff in CutoffCalculator.cutoffs(paydays: paydays, in: month, calendar: calendar)
-            where cutoff.endDate >= today && seen.insert(cutoff.startDate).inserted {
-                result.append(cutoff)
-            }
-        }
-        return result.sorted { $0.startDate < $1.startDate }
-    }
 
     private func total(_ items: [BillInstance]) -> Decimal {
         items.reduce(0) { $0 + ($1.amount ?? 0) }
     }
 
+    private func cutoffName(_ index: Int) -> String {
+        index == 0 ? "Current cutoff" : index == 1 ? "Next cutoff" : "Later"
+    }
+
+    /// The lists for the chosen filter. They're drawn by position, so switching filters changes the
+    /// text of the same headings in place, and their words and numbers can roll.
+    private var groups: [Group] {
+        switch filter {
+        case .all:
+            var result: [Group] = []
+            // Overdue bills inside a cutoff are listed in that cutoff, so only older ones are here.
+            if !engine.overdueBeforeCutoffs.isEmpty {
+                result.append(Group(title: "Overdue", tint: Theme.danger, items: engine.overdueBeforeCutoffs))
+            }
+            if engine.paydays.isEmpty {
+                result.append(Group(title: "Unpaid", items: engine.upcoming))
+            } else {
+                for (index, cutoff) in engine.cutoffs.prefix(4).enumerated() {
+                    let items = engine.bills(in: cutoff)
+                    // The current and next cutoffs always show; later empty ones are skipped.
+                    if !items.isEmpty || index < 2 {
+                        result.append(Group(
+                            title: "\(cutoffName(index)) · \(cutoff.longTitle())",
+                            items: items,
+                            emptyText: index == 0 ? "Nothing left to pay this cutoff." : "No bills in this cutoff yet."
+                        ))
+                    }
+                }
+            }
+            return result
+
+        case .overdue:
+            return [Group(title: "Overdue", tint: Theme.danger, items: engine.overdue, emptyText: "Nothing is overdue. Nice.")]
+
+        case .dueSoon:
+            return [Group(
+                title: "Due in the next \(BillFilterEngine.dueSoonDays) days",
+                tint: Theme.warning,
+                items: engine.dueSoon,
+                emptyText: "Nothing due in the next \(BillFilterEngine.dueSoonDays) days."
+            )]
+
+        case .currentCutoff:
+            return [cutoffGroup(index: 0, emptyText: "Nothing left to pay this cutoff.")]
+
+        case .nextCutoff:
+            return [cutoffGroup(index: 1, emptyText: "No bills in the next cutoff yet.")]
+
+        case .laterCutoffs:
+            let withBills = Array(engine.cutoffs.dropFirst(2)).filter { !engine.bills(in: $0).isEmpty }
+            if withBills.isEmpty {
+                return [Group(title: "Later cutoffs", items: [], emptyText: "No bills in later cutoffs yet.")]
+            }
+            return withBills.map { Group(title: "Later · \($0.longTitle())", items: engine.bills(in: $0)) }
+
+        case .paid:
+            return [Group(title: "Paid this month", tint: Theme.paid, items: engine.paidThisMonth, emptyText: "No bills paid this month yet.")]
+
+        case .accounts:
+            return []
+        }
+    }
+
+    private func cutoffGroup(index: Int, emptyText: String) -> Group {
+        guard engine.cutoffs.indices.contains(index) else {
+            return Group(title: cutoffName(index), items: [], emptyText: emptyText)
+        }
+        let cutoff = engine.cutoffs[index]
+        return Group(
+            title: "\(cutoffName(index)) · \(cutoff.longTitle())",
+            items: engine.bills(in: cutoff),
+            emptyText: emptyText
+        )
+    }
+
     // MARK: Body
 
     var body: some View {
-        if unpaid.isEmpty {
+        let groups = groups
+        // Nothing unpaid at all: the overview has nothing to say.
+        if filter == .all && engine.unpaid.isEmpty {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 24) {
-                Text("TO PAY")
-                    .font(.barlow(30, relativeTo: .title))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.bottom, -12)
-
-                if !overdue.isEmpty {
-                    group(title: "Overdue", tint: Theme.danger, items: overdue)
+                if filter == .all {
+                    Text("TO PAY")
+                        .font(.barlow(30, relativeTo: .title))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.bottom, -12)
                 }
 
-                if paydays.isEmpty {
-                    group(title: "Unpaid", tint: nil, items: upcoming)
-                    if selectedProfileID.isEmpty {
-                        note("Pick a profile to group these by cutoff.")
-                    } else {
-                        note("Set this profile's paydays in Settings → Cutoffs to group these by cutoff.")
-                    }
-                } else {
-                    cutoffGroups
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                    groupView(group)
+                }
+
+                if filter == .all && engine.paydays.isEmpty {
+                    note(selectedProfileID.isEmpty
+                         ? "Pick a profile to group these by cutoff."
+                         : "Set this profile's paydays in Settings → Cutoffs to group these by cutoff.")
+                } else if filter.needsCutoffs && engine.paydays.isEmpty {
+                    note("Set this profile's paydays in Settings → Cutoffs to use cutoff filters.")
                 }
             }
         }
     }
 
-    @ViewBuilder
-    private var cutoffGroups: some View {
-        ForEach(Array(cutoffs.prefix(4).enumerated()), id: \.element.startDate) { index, cutoff in
-            let items = upcoming.filter { cutoff.contains($0.dueDate) }
-            let prefix = index == 0 ? "Current cutoff" : index == 1 ? "Next cutoff" : "Later"
-            // The current and next cutoffs always show; later empty ones are skipped.
-            if !items.isEmpty || index < 2 {
-                group(
-                    title: "\(prefix) · \(cutoff.longTitle())",
-                    tint: nil,
-                    items: items,
-                    emptyText: index == 0 ? "Nothing left to pay this cutoff." : "No bills in this cutoff yet."
-                )
-            }
-        }
-    }
+    // MARK: Rows
 
-    private func group(title: String, tint: Color?, items: [BillInstance], emptyText: String? = nil) -> some View {
+    private func groupView(_ group: Group) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Eyebrow(title, color: tint ?? Theme.mutedInk)
+                // The title and total roll to their new text when the filter changes.
+                Eyebrow(group.title, color: group.tint ?? Theme.mutedInk)
+                    .contentTransition(.numericText())
                 Spacer()
-                if !items.isEmpty {
-                    Text(total(items).currencyString)
+                if !group.items.isEmpty {
+                    Text(total(group.items).currencyString)
                         .font(.barlow(20, weight: .medium, relativeTo: .title3))
-                        .foregroundStyle(tint ?? Theme.ink)
+                        .foregroundStyle(group.tint ?? Theme.ink)
+                        .contentTransition(.numericText())
                 }
             }
 
-            if items.isEmpty, let emptyText {
+            if group.items.isEmpty, let emptyText = group.emptyText {
                 Text(emptyText)
                     .font(.outfit(14, relativeTo: .footnote))
                     .foregroundStyle(Theme.mutedInk)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .cardStyle()
+                    .transition(.opacity)
             } else {
                 VStack(spacing: 0) {
-                    ForEach(Array(items.enumerated()), id: \.element.id) { index, instance in
+                    ForEach(Array(group.items.enumerated()), id: \.element.id) { index, instance in
                         if index > 0 { Divider().padding(.leading, 62) }
                         row(instance)
                     }
@@ -146,6 +189,7 @@ struct UnpaidByCutoffView: View {
                     Text(instance.amount?.currencyString ?? "—")
                         .font(.barlow(22, weight: .medium, relativeTo: .title3))
                         .foregroundStyle(Theme.ink)
+                        .contentTransition(.numericText())
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
@@ -153,6 +197,8 @@ struct UnpaidByCutoffView: View {
             }
             .buttonStyle(.plain)
             .accessibilityElement(children: .combine)
+            // Rows just fade, with no sliding.
+            .transition(.opacity)
         }
     }
 

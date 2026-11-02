@@ -101,10 +101,11 @@ final class Bill {
         return ((amount - previousAmount) / previousAmount as NSDecimalNumber).doubleValue * 100
     }
 
-    /// Account number with all but the last 4 characters hidden, e.g. "•••• 4589".
+    /// The account number as shown in lists and headers: all of it when it's short, otherwise just
+    /// the last 4 characters, e.g. "4589".
     var maskedAccountNumber: String? {
         guard let accountNumber, !accountNumber.isEmpty else { return nil }
-        return "•••• " + accountNumber.suffix(4)
+        return accountNumber.count > 6 ? String(accountNumber.suffix(4)) : accountNumber
     }
 
     /// Months between two consecutive bills.

@@ -178,6 +178,23 @@ extension View {
         }
     }
 
+    /// For screens that draw their own header: no navigation bar, and no bar background or scroll-edge
+    /// blur at the top. Otherwise the system briefly reserves space for the bar as you scroll back to
+    /// the top, and the content jumps.
+    @ViewBuilder
+    func ownsTopOfScreen() -> some View {
+        if #available(iOS 26.0, *) {
+            self
+                .toolbar(.hidden, for: .navigationBar)
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                .scrollEdgeEffectHidden(true, for: .top)
+        } else {
+            self
+                .toolbar(.hidden, for: .navigationBar)
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        }
+    }
+
     /// A capsule of Liquid Glass on iOS 26 and later, a material capsule before that.
     @ViewBuilder
     func glassCapsule() -> some View {
