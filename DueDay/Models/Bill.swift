@@ -27,6 +27,8 @@ final class Bill {
     /// Days before the due date to remind. 0 means on the due date.
     var reminderOffsets: [Int] = [3, 0]
     var defaultPaymentMethod: PaymentMethod?
+    /// Name of a custom payment method. When set, it's used instead of `defaultPaymentMethod`.
+    var customPaymentName: String?
     /// For variable accounts: the day of the month the bill usually arrives. Nil means no nudge.
     var expectedDay: Int?
     /// Show a Live Activity on the lock screen on the due date until the bill is paid.

@@ -8,7 +8,11 @@ struct MarkPaidSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var amountText = ""
-    @State private var method: PaymentMethod?
+    @Query(sort: \CustomPaymentMethod.createdAt) private var customMethods: [CustomPaymentMethod]
+
+    @State private var method: PaymentChoice?
+    @State private var isAddingMethod = false
+    @State private var newMethodName = ""
     @State private var paidDate = Date()
     @State private var referenceNumber = ""
     @State private var keepAttachment = true
@@ -79,8 +83,12 @@ struct MarkPaidSheet: View {
                     Eyebrow("Paid with")
                     LazyVGrid(columns: columns, spacing: 10) {
                         ForEach(PaymentMethod.allCases) { option in
-                            methodTile(option)
+                            methodTile(.builtIn(option))
                         }
+                        ForEach(customMethods) { custom in
+                            methodTile(.custom(custom.name))
+                        }
+                        addMethodTile
                     }
                 }
 
@@ -100,20 +108,62 @@ struct MarkPaidSheet: View {
                 .primaryButton()
                 .disabled((amount ?? 0) <= 0)
             }
-            .padding(20)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            // Extra room at the top so the title isn't crowded by the sheet's edge.
+            .padding(.top, 36)
         }
         .background(Theme.background)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {
-            method = instance.bill?.defaultPaymentMethod
+            method = instance.bill?.paymentChoice
             if let existing = instance.amount {
                 amountText = "\(existing)"
             }
         }
+        .alert("New payment method", isPresented: $isAddingMethod) {
+            TextField("Name, e.g. Cash", text: $newMethodName)
+            Button("Add") { addCustomMethod() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Saved so you can pick it for any bill.")
+        }
     }
 
-    private func methodTile(_ option: PaymentMethod) -> some View {
+    /// A tile that adds a custom payment method.
+    private var addMethodTile: some View {
+        Button {
+            newMethodName = ""
+            isAddingMethod = true
+        } label: {
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Add custom", systemImage: "plus").font(.outfit(15, weight: .semibold))
+                Text("Cash, another wallet…").font(.outfit(12)).opacity(0.8)
+            }
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(14)
+            .glassSurface(cornerRadius: 14)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func addCustomMethod() {
+        let name = newMethodName.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+        // Reuse a method that already has this name instead of adding a duplicate.
+        if let builtIn = PaymentMethod.allCases.first(where: { $0.title.caseInsensitiveCompare(name) == .orderedSame }) {
+            method = .builtIn(builtIn)
+        } else if let existing = customMethods.first(where: { $0.name.caseInsensitiveCompare(name) == .orderedSame }) {
+            method = .custom(existing.name)
+        } else {
+            modelContext.insert(CustomPaymentMethod(name: name))
+            method = .custom(name)
+        }
+    }
+
+    private func methodTile(_ option: PaymentChoice) -> some View {
         let isSelected = method == option
         return Button { method = isSelected ? nil : option } label: {
             VStack(alignment: .leading, spacing: 2) {

@@ -369,7 +369,7 @@ private struct AlsoRow: View {
     private var detail: String {
         var parts: [String] = []
         parts.append(instance.amount?.pesoString ?? "Amount varies")
-        if let method = instance.bill?.defaultPaymentMethod { parts.append(method.title) }
+        if let method = instance.bill?.paymentChoice { parts.append(method.title) }
         return parts.joined(separator: " · ")
     }
 }
@@ -600,7 +600,7 @@ private struct RecentlyPaidCard: View {
     private func detail(_ instance: BillInstance) -> String {
         var parts: [String] = []
         if let amount = instance.amount { parts.append(amount.pesoString) }
-        if let method = instance.latestPayment?.method { parts.append(method.title) }
+        if let method = instance.latestPayment?.choice { parts.append(method.title) }
         if let date = instance.latestPayment?.paidDate {
             parts.append(date.formatted(.dateTime.month(.abbreviated).day()))
         }

@@ -60,13 +60,14 @@ final class BillInstance {
     @discardableResult
     func markPaid(
         amount: Decimal,
-        method: PaymentMethod?,
+        method: PaymentChoice?,
         date: Date = .now,
         referenceNumber: String? = nil,
         note: String? = nil,
         in context: ModelContext
     ) -> Payment {
-        let payment = Payment(instance: self, paidDate: date, amountPaid: amount, method: method)
+        let payment = Payment(instance: self, paidDate: date, amountPaid: amount, method: nil)
+        payment.choice = method
         payment.referenceNumber = referenceNumber
         payment.note = note
         context.insert(payment)
@@ -80,7 +81,7 @@ final class BillInstance {
     @discardableResult
     func quickPay(in context: ModelContext) -> Bool {
         guard let amount, amount > 0 else { return false }
-        markPaid(amount: amount, method: bill?.defaultPaymentMethod, in: context)
+        markPaid(amount: amount, method: bill?.paymentChoice, in: context)
         return true
     }
 

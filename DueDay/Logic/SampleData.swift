@@ -55,7 +55,7 @@ enum SampleData {
         // A paid bill earlier this month.
         let pagibig = addBill("Pag-IBIG", "pagibig", .government, day: 1, amount: 200, method: .gcash)
         if let instance = pagibig.instances?.first(where: { $0.periodKey == currentKey }) {
-            instance.markPaid(amount: 200, method: .gcash, date: instance.dueDate, in: context)
+            instance.markPaid(amount: 200, method: .builtIn(.gcash), date: instance.dueDate, in: context)
         }
 
         // An overdue bill from last month.

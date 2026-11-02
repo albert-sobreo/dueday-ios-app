@@ -165,7 +165,7 @@ struct BillDetailView: View {
             if instance.isPaid {
                 fact("Due", instance.dueDate.formatted(.dateTime.month(.abbreviated).day()).uppercased())
             }
-            if let method = instance.latestPayment?.method ?? bill.defaultPaymentMethod {
+            if let method = instance.latestPayment?.choice ?? bill.paymentChoice {
                 if instance.isPaid || instance.billingPeriod != nil { Divider().frame(height: 34) }
                 fact("Pay via", method.title.uppercased())
             }
@@ -429,7 +429,7 @@ struct BillDetailView: View {
         if let date = instance.latestPayment?.paidDate {
             parts.append("Paid \(date.formatted(.dateTime.month(.abbreviated).day()))")
         }
-        if let method = instance.latestPayment?.method { parts.append(method.title) }
+        if let method = instance.latestPayment?.choice { parts.append(method.title) }
         return parts.joined(separator: " · ")
     }
 }

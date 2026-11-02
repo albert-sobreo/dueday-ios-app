@@ -318,7 +318,7 @@ struct NewAccountView: View {
         bill.dueDay = Calendar.current.component(.day, from: startDate)
         bill.weekendRule = weekendRule
         bill.reminderOffsets = reminderOffsets.sorted(by: >)
-        bill.defaultPaymentMethod = paymentMethod
+        bill.paymentChoice = paymentMethod
         bill.profile = profile
         modelContext.insert(bill)
 

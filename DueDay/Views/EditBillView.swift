@@ -21,7 +21,7 @@ struct EditBillView: View {
     @State private var startDate = Date()
     @State private var weekendRule = WeekendRule.none
     @State private var reminderOffsets: Set<Int> = []
-    @State private var paymentMethod: PaymentMethod?
+    @State private var paymentMethod: PaymentChoice?
     @State private var colorHex = ColorPalette.choices[0]
     @State private var originalColorHex = ColorPalette.choices[0]
     @State private var logoData: Data?
@@ -247,7 +247,7 @@ struct EditBillView: View {
         startDate = calendar.date(from: parts) ?? bill.startDate
         weekendRule = bill.weekendRule
         reminderOffsets = Set(bill.reminderOffsets)
-        paymentMethod = bill.defaultPaymentMethod
+        paymentMethod = bill.paymentChoice
         nudgeEnabled = bill.expectedDay != nil
         expectedDay = bill.expectedDay ?? 20
         originalColorHex = bill.colorHex ?? bill.displayColor.hexString
@@ -273,7 +273,7 @@ struct EditBillView: View {
         bill.category = category
         bill.accountNumber = accountNumber.isEmpty ? nil : accountNumber
         bill.reminderOffsets = reminderOffsets.sorted(by: >)
-        bill.defaultPaymentMethod = paymentMethod
+        bill.paymentChoice = paymentMethod
         bill.profile = profile
         if isVariable { bill.expectedDay = nudgeEnabled ? expectedDay : nil }
         // Only store a colour when it was changed, so untouched bills keep following their provider.

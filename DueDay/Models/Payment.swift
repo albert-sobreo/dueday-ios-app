@@ -8,6 +8,8 @@ final class Payment {
     var paidDate: Date = Date()
     var amountPaid: Decimal = 0
     var method: PaymentMethod?
+    /// Name of a custom payment method. When set, it's used instead of `method`.
+    var customMethodName: String?
     var referenceNumber: String?
     var note: String?
 
