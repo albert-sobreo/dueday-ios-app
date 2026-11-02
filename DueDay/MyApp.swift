@@ -14,7 +14,7 @@ import SwiftData
 
     let container: ModelContainer = {
         do {
-            return try ModelContainer(for: Profile.self, CustomProvider.self, Bill.self, BillInstance.self, Payment.self)
+            return try ModelContainer(for: Profile.self, CustomProvider.self, CustomPaymentMethod.self, Bill.self, BillInstance.self, Payment.self)
         } catch {
             fatalError("Could not create the model container: \(error)")
         }

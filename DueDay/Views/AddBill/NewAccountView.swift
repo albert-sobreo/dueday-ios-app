@@ -34,7 +34,7 @@ struct NewAccountView: View {
     @State private var startDate = Date()
     @State private var weekendRule = WeekendRule.none
     @State private var reminderOffsets: Set<Int> = [3, 0]
-    @State private var paymentMethod: PaymentMethod?
+    @State private var paymentMethod: PaymentChoice?
     @State private var billDueDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
     @State private var billingPeriod = ""
     @State private var rememberProvider = true

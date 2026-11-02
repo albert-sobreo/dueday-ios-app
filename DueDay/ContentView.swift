@@ -66,5 +66,5 @@ private extension View {
 
 #Preview {
     ContentView()
-        .modelContainer(for: [Profile.self, CustomProvider.self, Bill.self, BillInstance.self, Payment.self], inMemory: true)
+        .modelContainer(for: [Profile.self, CustomProvider.self, CustomPaymentMethod.self, Bill.self, BillInstance.self, Payment.self], inMemory: true)
 }

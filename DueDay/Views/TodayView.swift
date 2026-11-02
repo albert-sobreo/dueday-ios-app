@@ -148,17 +148,15 @@ struct TodayView: View {
         #endif
     }
 
-    /// One tap when the amount is known, otherwise ask for it first.
+    /// Always opens the Mark as paid sheet, so you can confirm the amount, date and payment method.
     private func pay(_ instance: BillInstance) {
-        if !instance.quickPay(in: modelContext) {
-            instanceToPay = instance
-        }
+        instanceToPay = instance
     }
 }
 
 #Preview("Today") {
     let container = try! ModelContainer(
-        for: Profile.self, CustomProvider.self, Bill.self, BillInstance.self, Payment.self,
+        for: Profile.self, CustomProvider.self, CustomPaymentMethod.self, Bill.self, BillInstance.self, Payment.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
     let context = container.mainContext
