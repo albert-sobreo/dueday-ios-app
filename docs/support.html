@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DueDay Support</title>
+<meta name="description" content="Help and contact for DueDay, a bill tracker for iPhone.">
+<style>
+  :root {
+    --accent: #C4472F;
+    --bg: #FBF7F4;
+    --card: #FFFFFF;
+    --ink: #1D1B1A;
+    --muted: #6B6460;
+    --line: #E8E0DB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #FF8A6E;
+      --bg: #141110;
+      --card: #1E1A18;
+      --ink: #F3EDE9;
+      --muted: #A8A09B;
+      --line: #332D2A;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 48px 22px 80px; }
+  .brand { color: var(--accent); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; }
+  h1 { font-size: 40px; line-height: 1.1; margin: 8px 0 20px; letter-spacing: -.01em; }
+  h2 { font-size: 21px; margin: 32px 0 8px; }
+  p { margin: 0 0 14px; }
+  a { color: var(--accent); }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin: 0 0 12px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 17px; }
+  .card p { margin: 0; color: var(--muted); }
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+  nav a { margin-right: 16px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">DueDay</div>
+  <h1>Support</h1>
+
+  <p>Need help with DueDay, found a bug, or have an idea? Email
+    <a href="mailto:YOUR_EMAIL@example.com">YOUR_EMAIL@example.com</a>
+    and include your iPhone model and iOS version. Replies usually come within a few days.</p>
+
+  <h2>Common questions</h2>
+
+  <div class="card">
+    <h3>Do I need an account?</h3>
+    <p>No. DueDay has no accounts. Your bills are stored on your iPhone.</p>
+  </div>
+
+  <div class="card">
+    <h3>I didn&rsquo;t get a reminder.</h3>
+    <p>Open Settings in DueDay and check that notifications are on. Also check iOS Settings &rsaquo; Notifications &rsaquo; DueDay, and that Focus or Do Not Disturb isn&rsquo;t silencing it. Reminder time can be changed in DueDay &rsaquo; Settings &rsaquo; Reminders.</p>
+  </div>
+
+  <div class="card">
+    <h3>What is a cutoff?</h3>
+    <p>A cutoff is the stretch of the month between two paydays. Set your paydays in Settings &rsaquo; Cutoffs and DueDay adds up the bills in each one, so you know how much to set aside before you&rsquo;re paid.</p>
+  </div>
+
+  <div class="card">
+    <h3>Why does a variable bill (like electricity) not repeat?</h3>
+    <p>Amounts change each month, so DueDay saves the account and you add each month&rsquo;s bill when it arrives. Scan the paper bill or type it in, and the account details are already filled in.</p>
+  </div>
+
+  <div class="card">
+    <h3>Is my scanned bill uploaded anywhere?</h3>
+    <p>No. Scans are read on your device and never leave it.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do I move my data to a new iPhone?</h3>
+    <p>DueDay data is included in your iPhone backup. Restoring a backup to the new phone brings your bills with it.</p>
+  </div>
+
+  <div class="card">
+    <h3>How do I delete my data?</h3>
+    <p>Delete the app from your iPhone. All of its data is removed with it.</p>
+  </div>
+
+  <footer>
+    <nav><a href="./">Home</a><a href="privacy.html">Privacy Policy</a></nav>
+    <p>&copy; 2026 Jan Albert Sobreo</p>
+  </footer>
+</main>
+</body>
+</html>

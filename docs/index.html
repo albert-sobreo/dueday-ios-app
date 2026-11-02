@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DueDay: Bill Tracker</title>
+<meta name="description" content="DueDay is a free, private bill tracker for iPhone, built around payday cutoffs.">
+<style>
+  :root {
+    --accent: #C4472F;
+    --bg: #FBF7F4;
+    --card: #FFFFFF;
+    --ink: #1D1B1A;
+    --muted: #6B6460;
+    --line: #E8E0DB;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --accent: #FF8A6E;
+      --bg: #141110;
+      --card: #1E1A18;
+      --ink: #F3EDE9;
+      --muted: #A8A09B;
+      --line: #332D2A;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 17px/1.6 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 72px 22px 80px; }
+  .brand { color: var(--accent); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; font-size: 13px; }
+  h1 { font-size: 52px; line-height: 1.05; margin: 8px 0 14px; letter-spacing: -.02em; }
+  .lead { font-size: 20px; color: var(--muted); margin: 0 0 32px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  .links a {
+    display: inline-block;
+    margin: 0 10px 10px 0;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--accent);
+    text-decoration: none;
+    font-weight: 600;
+  }
+  footer { margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); color: var(--muted); font-size: 15px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">DueDay</div>
+  <h1>Never miss a bill.</h1>
+  <p class="lead">A free, private bill tracker for iPhone, built around payday cutoffs.</p>
+
+  <ul>
+    <li>See how much to set aside before each payday</li>
+    <li>Reminders before and on the due date</li>
+    <li>Scan paper bills on your device</li>
+    <li>No account, no ads, no tracking. Your bills stay on your iPhone</li>
+  </ul>
+
+  <p class="links">
+    <a href="support.html">Support</a>
+    <a href="privacy.html">Privacy Policy</a>
+  </p>
+
+  <footer>&copy; 2026 Jan Albert Sobreo</footer>
+</main>
+</body>
+</html>
