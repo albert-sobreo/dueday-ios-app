@@ -97,7 +97,7 @@ struct MarkPaidSheet: View {
                         Text("Attach the scanned bill to this payment").font(.outfit(15))
                     }
                     .toggleStyle(.switch)
-                    .tint(Theme.paid)
+                    .tint(Theme.toggleOn)
                 }
 
                 Button(action: save) {

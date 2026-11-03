@@ -81,6 +81,10 @@ struct AddBillView: View {
                 }
             }
             .background(Theme.background)
+            // In the tab the search field floats at the bottom with the keyboard above it. Leave room
+            // under the last tiles so they can scroll fully clear, and let a drag close the keyboard.
+            .contentMargins(.bottom, isInTab ? 90 : 0, for: .scrollContent)
+            .scrollDismissesKeyboard(.interactively)
             .toolbarBackground(.hidden, for: .navigationBar)
             .toolbar {
                 if !isInTab {
@@ -211,7 +215,7 @@ struct AddBillView: View {
                                 Image(systemName: "pencil.circle.fill")
                                     .font(.title3)
                                     .symbolRenderingMode(.palette)
-                                    .foregroundStyle(.white, Theme.accent)
+                                    .foregroundStyle(Theme.onAccent, Theme.accent)
                                     .padding(6)
                             }
                         }

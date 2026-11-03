@@ -37,22 +37,23 @@ enum Theme {
     static let mutedInk = Color(light: 0x6B6960, dark: 0xB8B3A8)
 
     // Accent
-    /// The app's theme colour, #C4472F. Dark mode has its own lighter coral for better contrast,
-    /// with dark text on top of it.
-    static let accent = Color(light: 0xC4472F, dark: 0xFF8E74)
-    /// Text and icons on a filled accent: white in light mode, near-black in dark mode.
-    static let onAccent = Color(light: 0xFFFFFF, dark: 0x2B0E07)
-    /// A soft accent-coloured background, such as for unselected chips.
-    static let accentSoft = Color(light: 0xF7E4E0, dark: 0x4D2B22)
+    /// The app's accent is plain black on light backgrounds and white on dark ones.
+    static let accent = Color(light: 0x000000, dark: 0xFFFFFF)
+    /// Text and icons on a filled accent: white on the black fill, black on the white fill.
+    static let onAccent = Color(light: 0xFFFFFF, dark: 0x000000)
+    /// A soft neutral background, such as for unselected chips.
+    static let accentSoft = Color(light: 0xEBEBEB, dark: 0x2C2C2E)
     /// Selected tab colour.
     static let tabTint = accent
+    /// The "on" colour of switches: the standard iOS green, whatever the app's tint is.
+    static let toggleOn = Color(uiColor: .systemGreen)
 
     // Per-screen header tints, plus the strong colour used for text on them. In dark mode the
     // tints are lighter and the text brighter, so there's more contrast with the page.
     static let todayTint = Color(light: 0xE3F0FB, dark: 0x214466)
     static let todayStrong = Color(light: 0x0B3C5D, dark: 0xBFE0FA)
-    static let detailTint = Color(light: 0xFDEFE3, dark: 0x5A3822)
-    static let detailStrong = Color(light: 0x7A3510, dark: 0xFFD2AE)
+    static let detailTint = Color(light: 0xEFEFEF, dark: 0x2C2C2E)
+    static let detailStrong = Color(light: 0x1A1A1A, dark: 0xF2F2F2)
     static let monthTint = Color(light: 0xEEE9FB, dark: 0x382F66)
     static let monthStrong = Color(light: 0x3B2A7A, dark: 0xD9D0FA)
     static let addTint = Color(light: 0xE3F4EA, dark: 0x1F5233)
@@ -61,7 +62,7 @@ enum Theme {
     // Selected tile (e.g. the chosen payment method) and chart bars
     static let selected = Color(light: 0x0B3C5D, dark: 0x9CCBEF)
     static let onSelected = Color(light: 0xFFFFFF, dark: 0x0B1B28)
-    static let chartBar = Color(light: 0xEBDCCB, dark: 0x6E5645)
+    static let chartBar = Color(light: 0xD9D9D9, dark: 0x4A4A4C)
 
     // Status. Dark mode uses lighter, brighter shades with deeper fills behind them.
     static let paid = Color(light: 0x2E7D4F, dark: 0x7FE0A8)

@@ -47,16 +47,35 @@ struct SupportSection: View {
         } footer: {
             Text("DueDay is free, with no ads. A tip is completely optional and unlocks nothing.")
         }
+        // The thank-you sheet and the error alert are attached to the Settings screen instead. They
+        // used to be here, but buying a tip adds a row to this section, and a sheet on a section
+        // whose rows change can be dismissed the moment it appears.
         .task { await tips.load() }
-        .alert(
-            "Something went wrong",
-            isPresented: Binding(get: { tips.errorMessage != nil }, set: { if !$0 { tips.errorMessage = nil } })
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(tips.errorMessage ?? "")
-        }
-        .sheet(isPresented: $tips.showThankYou) { ThankYouView() }
+    }
+}
+
+extension View {
+    /// The tip jar's thank-you sheet and error alert. Put them on a view that stays in place,
+    /// such as the whole Settings screen, and not on the section that changes after a tip.
+    func tipJarPresentations() -> some View {
+        modifier(TipJarPresentations())
+    }
+}
+
+private struct TipJarPresentations: ViewModifier {
+    @State private var tips = TipJar.shared
+
+    func body(content: Content) -> some View {
+        content
+            .alert(
+                "Something went wrong",
+                isPresented: Binding(get: { tips.errorMessage != nil }, set: { if !$0 { tips.errorMessage = nil } })
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(tips.errorMessage ?? "")
+            }
+            .sheet(isPresented: $tips.showThankYou) { ThankYouView() }
     }
 }
 

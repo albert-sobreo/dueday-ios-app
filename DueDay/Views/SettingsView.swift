@@ -176,6 +176,7 @@ struct SettingsView: View {
             Section {
                 DatePicker("Remind me at", selection: reminderTime, displayedComponents: .hourAndMinute)
                 Toggle("Remind me when a bill is overdue", isOn: $overdueReminders)
+                    .tint(Theme.toggleOn)
 
                 if notificationsAllowed {
                     Label("Notifications are on", systemImage: "checkmark.circle.fill")
@@ -216,6 +217,7 @@ struct SettingsView: View {
 
             Section {
                 Toggle("Lock DueDay", isOn: lockToggle)
+                    .tint(Theme.toggleOn)
             } header: {
                 Text("Privacy")
             } footer: {
@@ -305,6 +307,7 @@ struct SettingsView: View {
         .sheet(isPresented: $showingProfiles) {
             ProfilesView(selectedID: $selectedProfileID)
         }
+        .tipJarPresentations()
     }
 }
 

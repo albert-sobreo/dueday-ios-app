@@ -435,7 +435,7 @@ struct BillDetailView: View {
                 Text(subtitle).font(.outfit(13)).foregroundStyle(Theme.mutedInk)
             }
         }
-        .tint(Theme.paid)
+        .tint(Theme.toggleOn)
     }
 
     /// "Mon, Nov 2 · 9:00 AM" for the next unpaid bill, or a hint when there's no bill yet.
