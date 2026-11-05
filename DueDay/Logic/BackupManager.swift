@@ -62,6 +62,9 @@ struct BackupFile: Codable {
         var defaultPaymentMethod: PaymentMethod?
         var customPaymentName: String?
         var expectedDay: Int?
+        /// Optional so backups made before these existed still import.
+        var usualDueDay: Int?
+        var remindsBeforeUsualDue: Bool?
         var liveActivityEnabled: Bool
         var isArchived: Bool
         var profileID: UUID?
@@ -158,7 +161,8 @@ enum BackupManager {
                 recurrenceInterval: $0.recurrenceInterval, startDate: $0.startDate, dueDay: $0.dueDay,
                 weekendRule: $0.weekendRule, reminderOffsets: $0.reminderOffsets,
                 defaultPaymentMethod: $0.defaultPaymentMethod, customPaymentName: $0.customPaymentName,
-                expectedDay: $0.expectedDay, liveActivityEnabled: $0.liveActivityEnabled,
+                expectedDay: $0.expectedDay, usualDueDay: $0.usualDueDay,
+                remindsBeforeUsualDue: $0.remindsBeforeUsualDue, liveActivityEnabled: $0.liveActivityEnabled,
                 isArchived: $0.isArchived, profileID: $0.profile?.id
             )
         }
@@ -267,6 +271,8 @@ enum BackupManager {
             bill.defaultPaymentMethod = record.defaultPaymentMethod
             bill.customPaymentName = record.customPaymentName
             bill.expectedDay = record.expectedDay
+            bill.usualDueDay = record.usualDueDay
+            bill.remindsBeforeUsualDue = record.remindsBeforeUsualDue ?? true
             bill.liveActivityEnabled = record.liveActivityEnabled
             bill.isArchived = record.isArchived
             bill.profile = record.profileID.flatMap { profilesByID[$0] }

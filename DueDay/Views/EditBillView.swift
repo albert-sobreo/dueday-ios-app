@@ -28,6 +28,10 @@ struct EditBillView: View {
     @State private var originalLogoData: Data?
     @State private var nudgeEnabled = false
     @State private var expectedDay = 20
+    @State private var remindsBeforeUsualDue = true
+    @State private var usualDueDay = 1
+    /// The due day shown when the screen opened, so an untouched inferred day isn't pinned on save.
+    @State private var loadedDueDay = 1
     @State private var showingAddEntry = false
     @State private var confirmingDelete = false
 
@@ -46,7 +50,7 @@ struct EditBillView: View {
             changeToken: [
                 name, accountNumber, amountText, colorHex, profile?.id, category, recurrence, interval,
                 startDate, weekendRule, reminderOffsets.sorted(), paymentMethod?.title, logoData,
-                nudgeEnabled, expectedDay,
+                nudgeEnabled, expectedDay, remindsBeforeUsualDue, usualDueDay,
             ] as [AnyHashable?],
             onPrimary: save
         ) {
@@ -139,10 +143,17 @@ struct EditBillView: View {
 
     private var nudgeCard: some View {
         FormCard(
-            title: "Nudge",
+            title: "Every month",
             symbol: "bell.badge",
-            footer: "If you haven't added this month's bill by that day, the account is flagged on your Bills tab."
+            footer: "Until you add that month's bill, you're reminded before the usual due day, nudged to add it, and the account is flagged on your Bills tab."
         ) {
+            OptionChip(title: "Remind me before it's due", symbol: "calendar.badge.clock", isSelected: remindsBeforeUsualDue) {
+                remindsBeforeUsualDue.toggle()
+            }
+            if remindsBeforeUsualDue {
+                Stepper("Usually due around day \(usualDueDay)", value: $usualDueDay, in: 1...31)
+                    .font(.outfit(16))
+            }
             OptionChip(title: "Nudge me to add the bill", symbol: "bell", isSelected: nudgeEnabled) {
                 nudgeEnabled.toggle()
             }
@@ -258,6 +269,9 @@ struct EditBillView: View {
         paymentMethod = bill.paymentChoice
         nudgeEnabled = bill.expectedDay != nil
         expectedDay = bill.expectedDay ?? 20
+        remindsBeforeUsualDue = bill.remindsBeforeUsualDue
+        usualDueDay = bill.expectedDueDay() ?? bill.dueDay
+        loadedDueDay = usualDueDay
         originalColorHex = bill.colorHex ?? bill.displayColor.hexString
         colorHex = originalColorHex
         originalLogoData = bill.logoData
@@ -283,7 +297,14 @@ struct EditBillView: View {
         bill.reminderOffsets = reminderOffsets.sorted(by: >)
         bill.paymentChoice = paymentMethod
         bill.profile = profile
-        if isVariable { bill.expectedDay = nudgeEnabled ? expectedDay : nil }
+        if isVariable {
+            bill.expectedDay = nudgeEnabled ? expectedDay : nil
+            bill.remindsBeforeUsualDue = remindsBeforeUsualDue
+            // Store the due day once it's set by hand or the account has no bill to take it from.
+            if bill.usualDueDay != nil || usualDueDay != loadedDueDay || bill.expectedDueDay() == nil {
+                bill.usualDueDay = usualDueDay
+            }
+        }
         // Only store a colour when it was changed, so untouched bills keep following their provider.
         if colorHex != originalColorHex { bill.colorHex = colorHex }
         if logoData != originalLogoData { bill.logoData = logoData }

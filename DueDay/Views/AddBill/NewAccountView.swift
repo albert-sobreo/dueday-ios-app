@@ -39,6 +39,10 @@ struct NewAccountView: View {
     @State private var paymentMethod: PaymentChoice?
     @State private var billDueDate = Calendar.current.date(byAdding: .day, value: 7, to: .now) ?? .now
     @State private var billingPeriod = ""
+    @State private var usualDueDay = NewAccountView.defaultDueDay
+    @State private var remindsBeforeUsualDue = true
+    @State private var nudgeEnabled = true
+    @State private var expectedDay = NewAccountView.arrivalDay(forDueDay: NewAccountView.defaultDueDay)
     @State private var rememberProvider = true
     @State private var colorHex = ColorPalette.choices[0]
     @State private var logoData: Data?
@@ -65,13 +69,19 @@ struct NewAccountView: View {
                 name, accountNumber, amountText, billingPeriod, colorHex,
                 profile?.id, category, amountType, recurrence, interval, startDate, weekendRule,
                 reminderOffsets.sorted(), paymentMethod?.title, billDueDate, rememberProvider, logoData,
+                usualDueDay, remindsBeforeUsualDue, nudgeEnabled, expectedDay,
             ] as [AnyHashable?],
             onPrimary: save
         ) {
             if profiles.count > 1 { profileCard }
             accountCard
             amountCard
-            if isVariable { billInHandCard } else { scheduleCard }
+            if isVariable {
+                billInHandCard
+                monthlyCard
+            } else {
+                scheduleCard
+            }
             logoCard
             colourCard
             remindersCard
@@ -79,6 +89,25 @@ struct NewAccountView: View {
             if isCustom { rememberCard }
         }
         .onAppear(perform: load)
+        // The usual days follow the bill in hand's due date. They can be changed below if it was unusual.
+        .onChange(of: billDueDate) { _, date in
+            usualDueDay = Calendar.current.component(.day, from: date)
+        }
+        .onChange(of: usualDueDay) { _, day in
+            expectedDay = Self.arrivalDay(forDueDay: day)
+        }
+    }
+
+    /// The day of `billDueDate`'s starting value, a week from today.
+    private static var defaultDueDay: Int {
+        let calendar = Calendar.current
+        return calendar.component(.day, from: calendar.date(byAdding: .day, value: 7, to: .now) ?? .now)
+    }
+
+    /// A first guess at when a bill arrives: about 10 days before it's due.
+    static func arrivalDay(forDueDay dueDay: Int) -> Int {
+        let day = dueDay - 10
+        return day >= 1 ? day : day + 30
     }
 
     // MARK: Cards
@@ -171,6 +200,29 @@ struct NewAccountView: View {
             VStack(alignment: .leading, spacing: 6) {
                 FieldLabel("Billing period (optional)")
                 TextField("Sep 28–Oct 27", text: $billingPeriod).insetField()
+            }
+        }
+    }
+
+    private var monthlyCard: some View {
+        FormCard(
+            title: "Every month",
+            symbol: "bell.badge",
+            footer: "Until you add that month's bill, DueDay nudges you to add it and still reminds you before the usual due day."
+        ) {
+            OptionChip(title: "Remind me before it's due", symbol: "calendar.badge.clock", isSelected: remindsBeforeUsualDue) {
+                remindsBeforeUsualDue.toggle()
+            }
+            if remindsBeforeUsualDue {
+                Stepper("Usually due around day \(usualDueDay)", value: $usualDueDay, in: 1...31)
+                    .font(.outfit(16))
+            }
+            OptionChip(title: "Nudge me to add the bill", symbol: "bell", isSelected: nudgeEnabled) {
+                nudgeEnabled.toggle()
+            }
+            if nudgeEnabled {
+                Stepper("Usually arrives around day \(expectedDay)", value: $expectedDay, in: 1...31)
+                    .font(.outfit(16))
             }
         }
     }
@@ -297,6 +349,11 @@ struct NewAccountView: View {
                     billingPeriod: period.isEmpty ? nil : period, in: modelContext
                 )
             }
+            let context = modelContext
+            Task {
+                try? context.save()
+                await ReminderScheduler.reschedule(in: context)
+            }
             onDone()
             return
         }
@@ -331,6 +388,11 @@ struct NewAccountView: View {
         bill.reminderOffsets = reminderOffsets.sorted(by: >)
         bill.paymentChoice = paymentMethod
         bill.profile = profile
+        if isVariable {
+            bill.usualDueDay = usualDueDay
+            bill.remindsBeforeUsualDue = remindsBeforeUsualDue
+            bill.expectedDay = nudgeEnabled ? expectedDay : nil
+        }
         modelContext.insert(bill)
 
         if isVariable {

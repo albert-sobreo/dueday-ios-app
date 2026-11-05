@@ -29,7 +29,8 @@ enum ReminderSettings {
     }
 }
 
-/// Schedules local notifications for unpaid bills and for variable accounts that are waiting for a bill.
+/// Schedules local notifications for unpaid bills and for variable accounts that are waiting for a bill:
+/// nudges to add it, and reminders before its usual due day even while the amount is unknown.
 /// iOS keeps only 64 pending notifications per app, so the soonest ones are scheduled and the rest
 /// are topped up each time the app opens or goes to the background.
 @MainActor
@@ -123,14 +124,33 @@ enum ReminderScheduler {
                 }
             }
 
-            // A nudge for a variable account whose bill hasn't been added yet this month.
-            if let nudge = nudgeDate(for: bill, now: now, calendar: calendar) {
+            // Reminders before a variable account's usual due day while that month's bill is still
+            // missing. There's no bill to pay yet, so they carry no "Mark paid" button.
+            for due in bill.awaitedDueDates(now: now, calendar: calendar) {
+                let key = calendar.component(.year, from: due) * 100 + calendar.component(.month, from: due)
+                for offset in Set(bill.reminderOffsets) {
+                    guard let day = calendar.date(byAdding: .day, value: -offset, to: due) else { continue }
+                    let fireDate = ReminderSettings.date(on: day, calendar: calendar)
+                    guard fireDate > now else { continue }
+
+                    let content = UNMutableNotificationContent()
+                    content.title = prefix + bill.name
+                    content.body = awaitedBody(daysBefore: offset)
+                    content.sound = .default
+                    pending.append((fireDate, request(
+                        id: "awaited-\(bill.id.uuidString)-\(key)-\(offset)", content: content, date: fireDate, calendar: calendar
+                    )))
+                }
+            }
+
+            // Nudges for a variable account whose bill hasn't been added yet, repeated until it is.
+            for (index, nudge) in nudgeDates(for: bill, now: now, calendar: calendar).enumerated() {
                 let content = UNMutableNotificationContent()
                 content.title = prefix + bill.name
                 content.body = "Has this month's bill arrived? Add the amount and due date."
                 content.sound = .default
                 pending.append((nudge, request(
-                    id: "nudge-\(bill.id.uuidString)", content: content, date: nudge, calendar: calendar
+                    id: "nudge-\(bill.id.uuidString)-\(index)", content: content, date: nudge, calendar: calendar
                 )))
             }
         }
@@ -166,24 +186,44 @@ enum ReminderScheduler {
         return late
     }
 
-    /// The next time to nudge: the account's usual arrival day, this month if it's still ahead and no
-    /// bill was added yet, otherwise next month.
-    private static func nudgeDate(for bill: Bill, now: Date, calendar: Calendar) -> Date? {
-        guard bill.amountType == .variable, let day = bill.expectedDay else { return nil }
-        let addedThisMonth = (bill.instances ?? []).contains {
-            calendar.isDate($0.createdAt, equalTo: now, toGranularity: .month)
+    /// For a due-date reminder on a variable account whose bill hasn't been added yet.
+    static func awaitedBody(daysBefore: Int) -> String {
+        let when: String
+        switch daysBefore {
+        case 0: when = "Usually due today"
+        case 1: when = "Usually due tomorrow"
+        default: when = "Usually due in \(daysBefore) days"
         }
+        return "\(when) · Amount not added yet"
+    }
 
-        for monthOffset in addedThisMonth ? [1] : [0, 1] {
+    /// Days after the usual arrival day that the nudge repeats, until the bill is added.
+    static let nudgeRepeats = [0, 3, 6]
+
+    /// The upcoming nudges: on the account's usual arrival day and a few days after, this month and
+    /// next. A month is skipped once a bill was added in it, or on or after its arrival day.
+    static func nudgeDates(for bill: Bill, now: Date, calendar: Calendar = .current) -> [Date] {
+        guard bill.amountType == .variable, !bill.isArchived, let day = bill.expectedDay else { return [] }
+        let createdDates = (bill.instances ?? []).map(\.createdAt)
+
+        var dates: [Date] = []
+        for monthOffset in 0...1 {
             guard let month = calendar.date(byAdding: .month, value: monthOffset, to: now),
                   let monthStart = calendar.dateInterval(of: .month, for: month)?.start,
                   let length = calendar.range(of: .day, in: .month, for: monthStart)?.count,
-                  let target = calendar.date(byAdding: .day, value: min(day, length) - 1, to: monthStart)
+                  let arrival = calendar.date(byAdding: .day, value: min(day, length) - 1, to: monthStart)
             else { continue }
-            let fireDate = ReminderSettings.date(on: target, calendar: calendar)
-            if fireDate > now { return fireDate }
+            let added = createdDates.contains {
+                calendar.isDate($0, equalTo: monthStart, toGranularity: .month) || $0 >= arrival
+            }
+            guard !added else { continue }
+            for repeatDays in nudgeRepeats {
+                guard let target = calendar.date(byAdding: .day, value: repeatDays, to: arrival) else { continue }
+                let fireDate = ReminderSettings.date(on: target, calendar: calendar)
+                if fireDate > now { dates.append(fireDate) }
+            }
         }
-        return nil
+        return dates
     }
 }
 
