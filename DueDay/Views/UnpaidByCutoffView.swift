@@ -15,7 +15,11 @@ struct UnpaidByCutoffView: View {
         let title: String
         var tint: Color?
         let items: [BillInstance]
+        /// Variable accounts whose bill hasn't been added yet, shown after the bills as "No bill yet".
+        var awaiting: [AwaitedBill] = []
         var emptyText: String?
+
+        var isEmpty: Bool { items.isEmpty && awaiting.isEmpty }
     }
 
     // MARK: Data
@@ -42,15 +46,15 @@ struct UnpaidByCutoffView: View {
                 result.append(Group(title: "Unpaid", items: engine.upcoming))
             } else {
                 for (index, cutoff) in engine.cutoffs.prefix(4).enumerated() {
-                    let items = engine.bills(in: cutoff)
+                    // Later cutoffs show each account once, so monthly bills don't repeat.
+                    let group = Group(
+                        title: "\(cutoffName(index)) · \(cutoff.longTitle())",
+                        items: index < 2 ? engine.bills(in: cutoff) : engine.laterBills(in: cutoff),
+                        awaiting: index < 2 ? engine.awaited(in: cutoff) : engine.laterAwaited(in: cutoff),
+                        emptyText: index == 0 ? "Nothing left to pay this cutoff." : "No bills in this cutoff yet."
+                    )
                     // The current and next cutoffs always show; later empty ones are skipped.
-                    if !items.isEmpty || index < 2 {
-                        result.append(Group(
-                            title: "\(cutoffName(index)) · \(cutoff.longTitle())",
-                            items: items,
-                            emptyText: index == 0 ? "Nothing left to pay this cutoff." : "No bills in this cutoff yet."
-                        ))
-                    }
+                    if !group.isEmpty || index < 2 { result.append(group) }
                 }
             }
             return result
@@ -73,11 +77,13 @@ struct UnpaidByCutoffView: View {
             return [cutoffGroup(index: 1, emptyText: "No bills in the next cutoff yet.")]
 
         case .laterCutoffs:
-            let withBills = Array(engine.cutoffs.dropFirst(2)).filter { !engine.bills(in: $0).isEmpty }
+            let withBills = engine.laterCutoffs
+                .map { Group(title: "Later · \($0.longTitle())", items: engine.laterBills(in: $0), awaiting: engine.laterAwaited(in: $0)) }
+                .filter { !$0.isEmpty }
             if withBills.isEmpty {
                 return [Group(title: "Later cutoffs", items: [], emptyText: "No bills in later cutoffs yet.")]
             }
-            return withBills.map { Group(title: "Later · \($0.longTitle())", items: engine.bills(in: $0)) }
+            return withBills
 
         case .paid:
             return [Group(title: "Paid this month", tint: Theme.paid, items: engine.paidThisMonth, emptyText: "No bills paid this month yet.")]
@@ -95,6 +101,7 @@ struct UnpaidByCutoffView: View {
         return Group(
             title: "\(cutoffName(index)) · \(cutoff.longTitle())",
             items: engine.bills(in: cutoff),
+            awaiting: engine.awaited(in: cutoff),
             emptyText: emptyText
         )
     }
@@ -104,7 +111,7 @@ struct UnpaidByCutoffView: View {
     var body: some View {
         let groups = groups
         // Nothing unpaid at all: the overview has nothing to say.
-        if filter == .all && engine.unpaid.isEmpty {
+        if filter == .all && engine.unpaid.isEmpty && engine.awaited.isEmpty {
             EmptyView()
         } else {
             VStack(alignment: .leading, spacing: 24) {
@@ -147,7 +154,7 @@ struct UnpaidByCutoffView: View {
                 }
             }
 
-            if group.items.isEmpty, let emptyText = group.emptyText {
+            if group.isEmpty, let emptyText = group.emptyText {
                 Text(emptyText)
                     .font(.outfit(14, relativeTo: .footnote))
                     .foregroundStyle(Theme.mutedInk)
@@ -159,6 +166,10 @@ struct UnpaidByCutoffView: View {
                     ForEach(Array(group.items.enumerated()), id: \.element.id) { index, instance in
                         if index > 0 { Divider().padding(.leading, 62) }
                         row(instance)
+                    }
+                    ForEach(Array(group.awaiting.enumerated()), id: \.element.id) { index, item in
+                        if index > 0 || !group.items.isEmpty { Divider().padding(.leading, 62) }
+                        awaitedRow(item)
                     }
                 }
                 .padding(.vertical, 6)
@@ -200,6 +211,37 @@ struct UnpaidByCutoffView: View {
             // Rows just fade, with no sliding.
             .transition(.opacity)
         }
+    }
+
+    /// A variable account whose bill for that month hasn't been added yet.
+    private func awaitedRow(_ item: AwaitedBill) -> some View {
+        NavigationLink(value: item.bill) {
+            HStack(spacing: 12) {
+                LogoBadge(logo: item.bill.logoData, symbol: item.bill.displayIcon, color: item.bill.displayColor, size: 38)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(item.bill.name)
+                        .font(.outfit(16, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    HStack(spacing: 6) {
+                        Text("~" + item.dueDate.formatted(.dateTime.month(.abbreviated).day()).uppercased())
+                            .font(.outfit(12, weight: .semibold, relativeTo: .caption))
+                            .foregroundStyle(Theme.mutedInk)
+                        StatusChip(text: "No bill yet", foreground: Theme.mutedInk, background: FormStyle.fieldFill)
+                    }
+                }
+                Spacer()
+                Text("—")
+                    .font(.barlow(22, weight: .medium, relativeTo: .title3))
+                    .foregroundStyle(Theme.mutedInk)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint("Usually due around this date. Add the bill when it arrives.")
+        .transition(.opacity)
     }
 
     private func note(_ text: String) -> some View {
