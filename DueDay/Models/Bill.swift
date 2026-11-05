@@ -31,6 +31,12 @@ final class Bill {
     var customPaymentName: String?
     /// For variable accounts: the day of the month the bill usually arrives. Nil means no nudge.
     var expectedDay: Int?
+    /// For variable accounts: the day of the month the bill is usually due. Nil means "use the due
+    /// day of the latest bill added".
+    var usualDueDay: Int?
+    /// For variable accounts: remind before the usual due day even when that month's bill hasn't
+    /// been added yet, so a missing amount never means a missed payment.
+    var remindsBeforeUsualDue: Bool = true
     /// Show a Live Activity on the lock screen on the due date until the bill is paid.
     var liveActivityEnabled: Bool = false
     var isArchived: Bool = false
@@ -68,6 +74,35 @@ final class Bill {
             calendar.isDate($0.createdAt, equalTo: now, toGranularity: .month)
         }
         return !addedThisMonth
+    }
+
+    /// The day of the month a variable account's bill is usually due: the one the person set,
+    /// otherwise the due day of the latest bill they added. Nil when neither is known.
+    func expectedDueDay(calendar: Calendar = .current) -> Int? {
+        if let usualDueDay { return usualDueDay }
+        guard let latest = (instances ?? []).max(by: { $0.dueDate < $1.dueDate }) else { return nil }
+        return calendar.component(.day, from: latest.dueDate)
+    }
+
+    /// Due dates this month and next for a variable account whose bill for that month hasn't been
+    /// added yet. A bill counts as added when one is due within 15 days of the usual date, so a bill
+    /// due a few days early or late still stops these reminders.
+    func awaitedDueDates(now: Date = .now, calendar: Calendar = .current) -> [Date] {
+        guard amountType == .variable, !isArchived, remindsBeforeUsualDue,
+              let day = expectedDueDay(calendar: calendar)
+        else { return [] }
+        let dueDates = (instances ?? []).map(\.dueDate)
+        return (0...1).compactMap { monthOffset -> Date? in
+            guard let month = calendar.date(byAdding: .month, value: monthOffset, to: now) else { return nil }
+            let parts = calendar.dateComponents([.year, .month], from: month)
+            guard let year = parts.year, let monthNumber = parts.month,
+                  let due = DueDateCalculator.dueDate(
+                      year: year, month: monthNumber, dueDay: day, weekendRule: .none, calendar: calendar
+                  )
+            else { return nil }
+            let alreadyAdded = dueDates.contains { abs($0.timeIntervalSince(due)) <= 15 * 86_400 }
+            return alreadyAdded ? nil : due
+        }
     }
 
     /// The bill's own colour as hex: the one the user picked, else the biller's. Nil for plain
