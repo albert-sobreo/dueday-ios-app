@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// The quick filters on the Bills tab.
 enum BillFilter: String, CaseIterable, Identifiable {
@@ -42,6 +43,14 @@ enum BillFilter: String, CaseIterable, Identifiable {
     var listsBills: Bool { self != .all && self != .accounts }
 }
 
+/// A variable account's upcoming due date while that month's bill hasn't been added yet, shown as
+/// "No bill yet" in the cutoff it falls in.
+struct AwaitedBill: Identifiable {
+    let bill: Bill
+    let dueDate: Date
+    var id: String { "\(bill.id.uuidString)-\(dueDate.timeIntervalSinceReferenceDate)" }
+}
+
 /// Works out which bills belong under each filter. `instances` should already be limited to the
 /// selected profile and to active (not archived) accounts.
 struct BillFilterEngine {
@@ -64,8 +73,17 @@ struct BillFilterEngine {
     /// Bills paid in the current month, most recent first.
     let paidThisMonth: [BillInstance]
     let dueSoon: [BillInstance]
+    /// Variable accounts still waiting for a bill, by their usual due date, soonest first.
+    let awaited: [AwaitedBill]
 
-    init(instances: [BillInstance], paydays: [Int], now: Date = .now, calendar: Calendar = .current) {
+    /// `accounts` are the active accounts, used to find variable ones still waiting for a bill.
+    init(
+        instances: [BillInstance],
+        paydays: [Int],
+        accounts: [Bill] = [],
+        now: Date = .now,
+        calendar: Calendar = .current
+    ) {
         self.instances = instances
         self.paydays = paydays
         self.now = now
@@ -97,6 +115,12 @@ struct BillFilterEngine {
                 ($0.latestPayment?.paidDate ?? $0.dueDate) > ($1.latestPayment?.paidDate ?? $1.dueDate)
             }
 
+        awaited = accounts
+            .flatMap { bill in
+                bill.awaitedDueDates(now: now, calendar: calendar).map { AwaitedBill(bill: bill, dueDate: $0) }
+            }
+            .sorted { $0.dueDate < $1.dueDate }
+
         if paydays.isEmpty {
             cutoffs = []
         } else {
@@ -119,6 +143,39 @@ struct BillFilterEngine {
         unpaid.filter { cutoff.contains($0.dueDate, calendar: calendar) }
     }
 
+    /// Variable accounts waiting for a bill that's usually due in a cutoff.
+    func awaited(in cutoff: Cutoff) -> [AwaitedBill] {
+        awaited.filter { cutoff.contains($0.dueDate, calendar: calendar) }
+    }
+
+    /// Cutoffs after the next one: the "Later" list.
+    var laterCutoffs: [Cutoff] { Array(cutoffs.dropFirst(2)) }
+
+    /// Bills in a later cutoff, keeping only each account's first bill across all later cutoffs.
+    /// A monthly bill is made a few months ahead, so without this it would show up several times.
+    func laterBills(in cutoff: Cutoff) -> [BillInstance] {
+        let later = laterCutoffs
+        var seen = Set<PersistentIdentifier>()
+        let firsts = unpaid.filter { instance in
+            guard later.contains(where: { $0.contains(instance.dueDate, calendar: calendar) }),
+                  let bill = instance.bill
+            else { return false }
+            return seen.insert(bill.persistentModelID).inserted
+        }
+        return firsts.filter { cutoff.contains($0.dueDate, calendar: calendar) }
+    }
+
+    /// Variable accounts waiting for a bill in a later cutoff, each account once.
+    func laterAwaited(in cutoff: Cutoff) -> [AwaitedBill] {
+        let later = laterCutoffs
+        var seen = Set<PersistentIdentifier>()
+        let firsts = awaited.filter { item in
+            later.contains { $0.contains(item.dueDate, calendar: calendar) }
+                && seen.insert(item.bill.persistentModelID).inserted
+        }
+        return firsts.filter { cutoff.contains($0.dueDate, calendar: calendar) }
+    }
+
     /// Overdue bills that no listed cutoff covers, because they're older than the current cutoff.
     /// Overdue bills inside a cutoff are shown there instead. Without paydays, all of them.
     var overdueBeforeCutoffs: [BillInstance] {
@@ -137,12 +194,22 @@ struct BillFilterEngine {
         case .paid: return paidThisMonth
         case .currentCutoff: return cutoffs.first.map(bills(in:)) ?? []
         case .nextCutoff: return cutoffs.dropFirst().first.map(bills(in:)) ?? []
-        case .laterCutoffs: return cutoffs.dropFirst(2).flatMap(bills(in:))
+        case .laterCutoffs: return laterCutoffs.flatMap(laterBills(in:))
+        }
+    }
+
+    /// Accounts waiting for a bill under a cutoff filter. Other filters list only real bills.
+    func awaitedItems(for filter: BillFilter) -> [AwaitedBill] {
+        switch filter {
+        case .currentCutoff: return cutoffs.first.map(awaited(in:)) ?? []
+        case .nextCutoff: return cutoffs.dropFirst().first.map(awaited(in:)) ?? []
+        case .laterCutoffs: return laterCutoffs.flatMap(laterAwaited(in:))
+        default: return []
         }
     }
 
     /// The number shown on a filter chip, or nil when it doesn't have one.
     func count(for filter: BillFilter) -> Int? {
-        filter.listsBills ? items(for: filter).count : nil
+        filter.listsBills ? items(for: filter).count + awaitedItems(for: filter).count : nil
     }
 }

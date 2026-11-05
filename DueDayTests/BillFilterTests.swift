@@ -42,7 +42,11 @@ struct BillFilterTests {
     }
 
     private func days(_ items: [BillInstance]) -> [Int] {
-        items.map { calendar.component(.day, from: $0.dueDate) + 100 * calendar.component(.month, from: $0.dueDate) }
+        days(items.map(\.dueDate))
+    }
+
+    private func days(_ dates: [Date]) -> [Int] {
+        dates.map { calendar.component(.day, from: $0) + 100 * calendar.component(.month, from: $0) }
     }
 
     @Test func overdueMeansDueBeforeToday() throws {
@@ -69,7 +73,56 @@ struct BillFilterTests {
         ])
         #expect(days(engine.items(for: .currentCutoff)) == [1105])
         #expect(days(engine.items(for: .nextCutoff)) == [1120])
-        #expect(days(engine.items(for: .laterCutoffs)) == [1208, 108])
+        // Both later bills are on the same account, so only its first one is listed.
+        #expect(days(engine.items(for: .laterCutoffs)) == [1208])
+    }
+
+    @Test func laterListsEachAccountOnce() throws {
+        let container = try ModelContainer(
+            for: Profile.self, CustomProvider.self, CustomPaymentMethod.self,
+            Bill.self, BillInstance.self, Payment.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        filterContainers.append(container)
+        let context = container.mainContext
+        let rent = Bill(name: "Rent")
+        let netflix = Bill(name: "Netflix")
+        context.insert(rent)
+        context.insert(netflix)
+        let made = [
+            rent.addInstance(dueDate: date(2026, 12, 5), amount: 15_000, calendar: calendar, in: context),
+            rent.addInstance(dueDate: date(2027, 1, 5), amount: 15_000, calendar: calendar, in: context),
+            rent.addInstance(dueDate: date(2027, 2, 5), amount: 15_000, calendar: calendar, in: context),
+            netflix.addInstance(dueDate: date(2026, 12, 20), amount: 549, calendar: calendar, in: context),
+            netflix.addInstance(dueDate: date(2027, 1, 20), amount: 549, calendar: calendar, in: context),
+        ]
+        let engine = BillFilterEngine(instances: made, paydays: paydays, now: today, calendar: calendar)
+        #expect(days(engine.items(for: .laterCutoffs)) == [1205, 1220])
+        #expect(engine.count(for: .laterCutoffs) == 2)
+    }
+
+    @Test func variableAccountsWithNoBillShowInTheirCutoff() throws {
+        let container = try ModelContainer(
+            for: Profile.self, CustomProvider.self, CustomPaymentMethod.self,
+            Bill.self, BillInstance.self, Payment.self,
+            configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+        )
+        filterContainers.append(container)
+        let context = container.mainContext
+        let meralco = Bill(name: "Meralco")
+        meralco.amountType = .variable
+        meralco.recurrence = .once
+        meralco.usualDueDay = 8
+        context.insert(meralco)
+
+        // Usually due Nov 8 (this cutoff) and Dec 8 (later), with no bill added yet.
+        let engine = BillFilterEngine(instances: [], paydays: paydays, accounts: [meralco], now: today, calendar: calendar)
+        #expect(days(engine.awaitedItems(for: .currentCutoff).map(\.dueDate)) == [1108])
+        #expect(engine.awaitedItems(for: .nextCutoff).isEmpty)
+        #expect(days(engine.awaitedItems(for: .laterCutoffs).map(\.dueDate)) == [1208])
+        #expect(engine.count(for: .laterCutoffs) == 1)
+        // Real-bill lists stay real bills only.
+        #expect(engine.items(for: .laterCutoffs).isEmpty)
     }
 
     @Test func overdueBillsAreNotInTheCutoffFilters() throws {

@@ -39,6 +39,10 @@ import UserNotifications
                 }
         }
         .modelContainer(container)
+        // Tops up bills and reminders in the background, so they keep coming without opening the app.
+        .backgroundTask(.appRefresh(BackgroundRefresh.identifier)) {
+            await BackgroundRefresh.run()
+        }
         .onChange(of: scenePhase, initial: true) { _, phase in
             switch phase {
             case .active:
@@ -53,6 +57,7 @@ import UserNotifications
                 // Changes made while the app was open become reminders as the person leaves.
                 try? container.mainContext.save()
                 Task { await ReminderScheduler.reschedule(in: container.mainContext) }
+                BackgroundRefresh.schedule()
                 // Bills may have been added or removed, so let Siri learn the current names.
                 DueDayShortcuts.updateAppShortcutParameters()
             default:

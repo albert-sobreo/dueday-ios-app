@@ -23,7 +23,8 @@ struct BillsListView: View {
             instances: instances.filter { instance in
                 instance.bill.map { activeIDs.contains($0.persistentModelID) } ?? false
             },
-            paydays: profiles.first { $0.id.uuidString == selectedProfileID }?.paydays ?? []
+            paydays: profiles.first { $0.id.uuidString == selectedProfileID }?.paydays ?? [],
+            accounts: activeBills
         )
     }
 

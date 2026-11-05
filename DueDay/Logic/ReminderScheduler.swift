@@ -156,8 +156,19 @@ enum ReminderScheduler {
         }
 
         center.removeAllPendingNotificationRequests()
-        for item in pending.sorted(by: { $0.date < $1.date }).prefix(limit) {
+        let scheduled = pending.sorted(by: { $0.date < $1.date }).prefix(limit)
+        for item in scheduled {
             try? await center.add(item.request)
+        }
+
+        // After the last reminder nothing else is lined up until the app runs again, so ask the person
+        // to open it. Opening the app (or a background refresh) moves this further out each time.
+        if let last = scheduled.last?.date, let fireDate = keepGoingDate(after: last, calendar: calendar) {
+            let content = UNMutableNotificationContent()
+            content.title = "DueDay"
+            content.body = "Open DueDay so your bill reminders keep coming."
+            content.sound = .default
+            try? await center.add(request(id: "keep-going", content: content, date: fireDate, calendar: calendar))
         }
     }
 
@@ -184,6 +195,12 @@ enum ReminderScheduler {
         let late = daysLate == 1 ? "Overdue by 1 day" : "Overdue by \(daysLate) days"
         if let amount = instance.amount { return "\(late) · \(amount.currencyString)" }
         return late
+    }
+
+    /// The day after the last scheduled reminder, at the usual reminder time.
+    static func keepGoingDate(after last: Date, calendar: Calendar = .current) -> Date? {
+        guard let nextDay = calendar.date(byAdding: .day, value: 1, to: last) else { return nil }
+        return ReminderSettings.date(on: nextDay, calendar: calendar)
     }
 
     /// For a due-date reminder on a variable account whose bill hasn't been added yet.

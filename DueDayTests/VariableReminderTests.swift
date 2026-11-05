@@ -118,4 +118,10 @@ struct VariableReminderTests {
         #expect(NewAccountView.arrivalDay(forDueDay: 25) == 15)
         #expect(NewAccountView.arrivalDay(forDueDay: 5) == 25)
     }
+
+    @Test func keepGoingReminderIsTheDayAfterTheLastOne() {
+        let last = ReminderSettings.date(on: date(2027, 1, 20), calendar: calendar)
+        let keepGoing = ReminderScheduler.keepGoingDate(after: last, calendar: calendar)
+        #expect(keepGoing == ReminderSettings.date(on: date(2027, 1, 21), calendar: calendar))
+    }
 }
