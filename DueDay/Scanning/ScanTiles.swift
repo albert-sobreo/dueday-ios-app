@@ -9,6 +9,7 @@ struct ScanTiles: View {
 
     @State private var showingCamera = false
     @State private var showingFileImporter = false
+    @State private var showingPhotoPicker = false
     @State private var photoItem: PhotosPickerItem?
     @State private var isReading = false
     @State private var message: String?
@@ -22,9 +23,9 @@ struct ScanTiles: View {
 
             Menu {
                 Button("PDF from Files", systemImage: "doc") { showingFileImporter = true }
-                PhotosPicker(selection: $photoItem, matching: .images) {
-                    Label("Photo or screenshot", systemImage: "photo")
-                }
+                // A PhotosPicker placed inside a Menu is torn down when the menu closes, so its sheet never
+                // appears. The button only flips a flag, and the picker is presented from outside the menu.
+                Button("Photo or screenshot", systemImage: "photo") { showingPhotoPicker = true }
             } label: {
                 tile("Import e-bill", "PDF or screenshot", symbol: "square.and.arrow.down")
             }
@@ -46,6 +47,7 @@ struct ScanTiles: View {
             }
             .ignoresSafeArea()
         }
+        .photosPicker(isPresented: $showingPhotoPicker, selection: $photoItem, matching: .images)
         .fileImporter(isPresented: $showingFileImporter, allowedContentTypes: [.pdf]) { result in
             guard case .success(let url) = result else { return }
             Task { await read(pdfAt: url) }
