@@ -26,6 +26,27 @@ struct ScanUpdateSheet: View {
     private var previewImage: UIImage? { update.draft.attachment.flatMap(UIImage.init(data:)) }
     private var amount: Decimal? { amountText.parsedAmount }
 
+    /// Why this scan may be for a different account than this bill's, or nil.
+    private var conflict: AccountMatcher.Conflict? {
+        guard let bill = instance.bill else { return nil }
+        return AccountMatcher.conflict(
+            scannedPresetID: scanned.presetID, scannedAccountNumber: scanned.accountNumber, with: bill
+        )
+    }
+
+    private var conflictMessage: String? {
+        let billName = instance.bill?.name ?? "this bill"
+        switch conflict {
+        case .differentAccountNumber:
+            return "The account number on this scan doesn't match \(billName). Check it's the right bill before updating."
+        case .differentBiller(let presetID):
+            let biller = PresetStore.preset(withID: presetID)?.name ?? "another biller"
+            return "This looks like a \(biller) bill, not \(billName). Check it's the right bill before updating."
+        case nil:
+            return nil
+        }
+    }
+
     var body: some View {
         FormScreen(
             title: instance.bill?.name ?? "Update bill",
@@ -48,6 +69,12 @@ struct ScanUpdateSheet: View {
                         .clipShape(.rect(cornerRadius: 12))
                         .frame(maxWidth: .infinity)
                         .accessibilityLabel("Scanned bill")
+                }
+            }
+
+            if let conflictMessage {
+                FormCard(title: "Check the account", symbol: "exclamationmark.triangle", footer: conflictMessage) {
+                    EmptyView()
                 }
             }
 
@@ -116,8 +143,9 @@ struct ScanUpdateSheet: View {
         instance.billingPeriod = period.isEmpty ? nil : period
         if keepScan, let data = update.draft.attachment { instance.attachment = data }
 
-        // A bill's account number is filled in from the scan if it didn't have one.
-        if let bill = instance.bill, bill.accountNumber == nil, let number = scanned.accountNumber {
+        // A bill's account number is filled in from the scan if it didn't have one, unless the scan
+        // looks like it's for another account.
+        if conflict == nil, let bill = instance.bill, bill.accountNumber == nil, let number = scanned.accountNumber {
             bill.accountNumber = number
         }
 

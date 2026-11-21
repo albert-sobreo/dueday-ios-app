@@ -56,12 +56,13 @@ enum Theme {
     static let detailStrong = Color(light: 0x1A1A1A, dark: 0xF2F2F2)
     static let monthTint = Color(light: 0xEEE9FB, dark: 0x382F66)
     static let monthStrong = Color(light: 0x3B2A7A, dark: 0xD9D0FA)
+    /// Text on a `monthStrong` fill, such as the selected day: white on the deep purple, dark on the
+    /// pale lavender of dark mode.
+    static let onMonthStrong = Color(light: 0xFFFFFF, dark: 0x1A1440)
     static let addTint = Color(light: 0xE3F4EA, dark: 0x1F5233)
     static let addStrong = Color(light: 0x14532D, dark: 0xB5EBC8)
 
-    // Selected tile (e.g. the chosen payment method) and chart bars
-    static let selected = Color(light: 0x0B3C5D, dark: 0x9CCBEF)
-    static let onSelected = Color(light: 0xFFFFFF, dark: 0x0B1B28)
+    // Chart bars. Selected tiles and chips use `FormStyle.selectedFill`.
     static let chartBar = Color(light: 0xD9D9D9, dark: 0x4A4A4C)
 
     // Status. Dark mode uses lighter, brighter shades with deeper fills behind them.
@@ -73,6 +74,14 @@ enum Theme {
     static let dangerFill = Color(light: 0xF9D7D3, dark: 0x54231F)
     static let info = Color(light: 0x1565A8, dark: 0x9CD0FF)
     static let infoFill = Color(light: 0xD3E6F7, dark: 0x1F3F5E)
+
+    // Due-date pills, from hot (due now) to cool (far away). Each is a solid fill with the text
+    // colour on it. In dark mode the fill is lighter and the text dark, so it stays readable.
+    static let urgencyNow = (fill: Color(light: 0xD32F2F, dark: 0xFF8A80), text: Color(light: 0xFFFFFF, dark: 0x3B0A07))
+    static let urgencySoon = (fill: Color(light: 0xE8590C, dark: 0xFFA066), text: Color(light: 0xFFFFFF, dark: 0x3A1500))
+    static let urgencyWeek = (fill: Color(light: 0xF59F00, dark: 0xFFD166), text: Color(light: 0x3A2600, dark: 0x3A2600))
+    static let urgencyFortnight = (fill: Color(light: 0x00897B, dark: 0x5FD6C8), text: Color(light: 0xFFFFFF, dark: 0x03302B))
+    static let urgencyLater = (fill: Color(light: 0x1E88E5, dark: 0x8EC5FF), text: Color(light: 0xFFFFFF, dark: 0x06243F))
 }
 
 // MARK: - Fonts
@@ -117,7 +126,9 @@ struct StatusChip: View {
     let background: Color
 
     var body: some View {
+        // Uppercased here, so the wording itself can be written and translated normally.
         Text(text)
+            .textCase(.uppercase)
             .font(.outfit(11, weight: .bold, relativeTo: .caption))
             .tracking(1.4)
             .foregroundStyle(foreground)
@@ -193,6 +204,17 @@ extension View {
             self
                 .toolbar(.hidden, for: .navigationBar)
                 .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+        }
+    }
+
+    /// Lets rows in a `ScrollView` show swipe actions, one row at a time. Needs iOS 27; earlier
+    /// versions only support swipe actions in a `List`, so every swipe action also needs another way in.
+    @ViewBuilder
+    func rowSwipeActionsContainer() -> some View {
+        if #available(iOS 27.0, *) {
+            self.swipeActionsContainer()
+        } else {
+            self
         }
     }
 

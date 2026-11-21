@@ -14,8 +14,12 @@ struct MonthView: View {
     @State private var titleMonth = MonthView.startOfMonth(.now)
     @State private var slideEdge: Edge = .trailing
     @State private var selectedDate = Calendar.current.startOfDay(for: .now)
+    /// Day cells and the weekday row grow with the text size, so large text isn't clipped.
+    @ScaledMetric(relativeTo: .body) private var dayCellHeight: CGFloat = 50
+    @ScaledMetric(relativeTo: .caption) private var weekdayRowHeight: CGFloat = 16
 
     private var calendar: Calendar { .current }
+    private var isShowingCurrentMonth: Bool { calendar.isDate(month, equalTo: .now, toGranularity: .month) }
     private var strong: Color { Theme.monthStrong }
 
     private static func startOfMonth(_ date: Date) -> Date {
@@ -112,19 +116,23 @@ struct MonthView: View {
                     Text(titleMonth.formatted(.dateTime.month(.wide)).uppercased())
                         .font(.barlow(60, weight: .medium, relativeTo: .largeTitle))
                         .foregroundStyle(strong)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .id(titleMonth)
                         .transition(.push(from: slideEdge))
                 }
                 .clipped()
-                Spacer()
+                Spacer(minLength: 8)
                 Eyebrow(titleMonth.formatted(.dateTime.year()), color: strong)
                     .contentTransition(.numericText())
             }
             .padding(.top, 8)
             .padding(.bottom, -8)
 
+            monthControls
+
             HStack {
-                Text("\(monthInstances.count) \(monthInstances.count == 1 ? "BILL" : "BILLS") · \(monthTotal.pesoString)")
+                Text("\(String(inflecting: "^[\(monthInstances.count) bill](inflect: true)").uppercased()) · \(monthTotal.pesoString)")
                     .contentTransition(.numericText())
                     .font(.barlow(22, weight: .semibold, relativeTo: .title3))
                     .tracking(1.2)
@@ -145,6 +153,45 @@ struct MonthView: View {
         .padding(.bottom, 24)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background { Theme.monthTint.padding(.top, -400) }
+    }
+
+    /// Buttons for the previous and next month, plus a way back to this month. Swiping still works;
+    /// these make it discoverable and usable with VoiceOver.
+    private var monthControls: some View {
+        HStack(spacing: 8) {
+            Button { changeMonth(by: -1) } label: {
+                Image(systemName: "chevron.left").frame(width: 20, height: 20)
+            }
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Previous month")
+
+            Button { changeMonth(by: 1) } label: {
+                Image(systemName: "chevron.right").frame(width: 20, height: 20)
+            }
+            .buttonBorderShape(.circle)
+            .accessibilityLabel("Next month")
+
+            Spacer()
+
+            if !isShowingCurrentMonth {
+                Button("Today", action: goToToday)
+                    .transition(.opacity)
+            }
+        }
+        .font(.outfit(14, weight: .semibold, relativeTo: .subheadline))
+        .secondaryButton(tint: strong)
+        .animation(.snappy, value: isShowingCurrentMonth)
+    }
+
+    /// Back to this month, with today selected.
+    private func goToToday() {
+        let current = Self.startOfMonth(.now)
+        slideEdge = current > month ? .trailing : .leading
+        withAnimation(.snappy) {
+            month = current
+            titleMonth = current
+            selectedDate = calendar.startOfDay(for: .now)
+        }
     }
 
     /// Swipe left for the next month, right for the previous. The calendar slides once the swipe is
@@ -178,15 +225,16 @@ struct MonthView: View {
                     }
                 }
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityAction(named: "Next month") { changeMonth(by: 1) }
+        .accessibilityAction(named: "Previous month") { changeMonth(by: -1) }
     }
 
     private func height(of monthDate: Date) -> CGFloat {
         let rows = CGFloat((gridDays(in: monthDate).count + 6) / 7)
-        // The weekday row, then one row of 50 per week, with the grid's spacing between them.
-        return Self.weekdayRowHeight + 8 + rows * 50 + (rows - 1) * 6
+        // The weekday row, then one row per week, with the grid's spacing between them.
+        return weekdayRowHeight + 8 + rows * dayCellHeight + (rows - 1) * 6
     }
-
-    private static let weekdayRowHeight: CGFloat = 16
 
     private func calendarGrid(for monthDate: Date) -> some View {
         let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
@@ -199,7 +247,7 @@ struct MonthView: View {
                     Text(weekdaySymbols[index])
                         .font(.outfit(12, weight: .semibold, relativeTo: .caption))
                         .foregroundStyle(strong)
-                        .frame(height: Self.weekdayRowHeight)
+                        .frame(height: weekdayRowHeight)
                 }
             }
             LazyVGrid(columns: columns, spacing: 6) {
@@ -207,7 +255,7 @@ struct MonthView: View {
                     if let date = days[index] {
                         dayCell(date, bills: bills, paydays: paydays)
                     } else {
-                        Color.clear.frame(height: 50)
+                        Color.clear.frame(height: dayCellHeight)
                     }
                 }
             }
@@ -234,11 +282,11 @@ struct MonthView: View {
                 }
                 .frame(height: 5)
                 Text(paydays.contains(day) ? "PAY" : " ")
-                    .font(.outfit(8, weight: .bold, relativeTo: .caption2))
-                    .foregroundStyle(isSelected ? Color.white : Theme.paid)
+                    .font(.outfit(10, weight: .bold, relativeTo: .caption2))
+                    .foregroundStyle(isSelected ? Theme.onMonthStrong : Theme.paid)
             }
-            .foregroundStyle(isSelected ? Color.white : Theme.ink)
-            .frame(maxWidth: .infinity, minHeight: 50)
+            .foregroundStyle(isSelected ? Theme.onMonthStrong : Theme.ink)
+            .frame(maxWidth: .infinity, minHeight: dayCellHeight)
             .background {
                 RoundedRectangle(cornerRadius: 12)
                     .fill(isSelected ? strong : Theme.card.opacity(0.65))
@@ -254,12 +302,13 @@ struct MonthView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// Green when paid, orange when overdue or due within 3 days, purple otherwise.
+    /// Green when paid, red when overdue, orange when due within 3 days, purple otherwise.
     private func dotColor(for instance: BillInstance, selected: Bool) -> Color {
-        if selected { return .white }
+        if selected { return Theme.onMonthStrong }
         if instance.isPaid { return Theme.paid }
         switch instance.status() {
-        case .overdue, .due: return Theme.warning
+        case .overdue: return Theme.danger
+        case .due: return Theme.warning
         default:
             let days = calendar.dateComponents(
                 [.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: instance.dueDate)
@@ -273,15 +322,32 @@ struct MonthView: View {
         return bills.isEmpty ? day : "\(day), \(bills.count) \(bills.count == 1 ? "bill" : "bills")"
     }
 
+    /// One row when it fits, otherwise two, so it isn't cut off on small screens or with large text.
     private var legend: some View {
-        HStack(spacing: 14) {
-            legendItem("Paid", Theme.paid)
-            legendItem("Due soon", Theme.warning)
-            legendItem("Upcoming", strong)
-            Text("PAY = payday")
-                .font(.outfit(12, weight: .bold, relativeTo: .caption))
-                .foregroundStyle(Theme.paid)
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 14) {
+                legendDots
+                paydayKey
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 14) { legendDots }
+                paydayKey
+            }
         }
+    }
+
+    @ViewBuilder
+    private var legendDots: some View {
+        legendItem("Paid", Theme.paid)
+        legendItem("Overdue", Theme.danger)
+        legendItem("Due soon", Theme.warning)
+        legendItem("Upcoming", strong)
+    }
+
+    private var paydayKey: some View {
+        Text("PAY = payday")
+            .font(.outfit(12, weight: .bold, relativeTo: .caption))
+            .foregroundStyle(Theme.paid)
     }
 
     private func legendItem(_ title: String, _ color: Color) -> some View {

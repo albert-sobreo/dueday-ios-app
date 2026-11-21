@@ -99,4 +99,33 @@ struct AccountMatcherTests {
         )
         #expect(found == nil)
     }
+
+    // MARK: Conflicts
+
+    @Test func aDifferentAccountNumberIsAConflict() throws {
+        let context = try makeContext()
+        let profile = Profile(name: "Personal"); context.insert(profile)
+        let meralco = account("Meralco", preset: "meralco", number: "2011-4589-321", profile: profile, in: context)
+
+        let conflict = AccountMatcher.conflict(scannedPresetID: "meralco", scannedAccountNumber: "9999-0000-111", with: meralco)
+        #expect(conflict == .differentAccountNumber)
+    }
+
+    @Test func aDifferentBillerIsAConflict() throws {
+        let context = try makeContext()
+        let profile = Profile(name: "Personal"); context.insert(profile)
+        let meralco = account("Meralco", preset: "meralco", profile: profile, in: context)
+
+        let conflict = AccountMatcher.conflict(scannedPresetID: "maynilad", scannedAccountNumber: nil, with: meralco)
+        #expect(conflict == .differentBiller(presetID: "maynilad"))
+    }
+
+    @Test func missingDetailsAreNotAConflict() throws {
+        let context = try makeContext()
+        let profile = Profile(name: "Personal"); context.insert(profile)
+        let meralco = account("Meralco", preset: "meralco", number: "2011-4589-321", profile: profile, in: context)
+
+        #expect(AccountMatcher.conflict(scannedPresetID: nil, scannedAccountNumber: nil, with: meralco) == nil)
+        #expect(AccountMatcher.conflict(scannedPresetID: "meralco", scannedAccountNumber: "20114589321", with: meralco) == nil)
+    }
 }

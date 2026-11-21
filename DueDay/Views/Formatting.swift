@@ -52,6 +52,13 @@ extension Decimal {
 }
 
 extension String {
+    /// A localized string with grammar agreement applied, such as "^[\(days) day](inflect: true)"
+    /// becoming "1 day" or "3 days". `String(localized:)` alone leaves the markup in place; only
+    /// `AttributedString` inflects it.
+    init(inflecting resource: String.LocalizationValue) {
+        self.init(AttributedString(localized: resource).characters)
+    }
+
     /// Parses user input like "2,345.60" into a Decimal, ignoring commas and a currency sign.
     var parsedAmount: Decimal? {
         let cleaned = replacingOccurrences(of: ",", with: "")

@@ -44,4 +44,25 @@ enum AccountMatcher {
             return number.isEmpty || existing.isEmpty || existing == number
         }
     }
+
+    /// Why a scan looks like it's for a different account than the one it's being added to.
+    enum Conflict: Equatable {
+        /// Both have an account number of at least 4 digits, and they differ.
+        case differentAccountNumber
+        /// The scan was recognised as another biller.
+        case differentBiller(presetID: String)
+    }
+
+    /// A reason this scan may not belong to `account`, or nil when nothing contradicts it.
+    static func conflict(scannedPresetID: String?, scannedAccountNumber: String?, with account: Bill) -> Conflict? {
+        let scannedNumber = digits(scannedAccountNumber)
+        let existingNumber = digits(account.accountNumber)
+        if scannedNumber.count >= 4, existingNumber.count >= 4, scannedNumber != existingNumber {
+            return .differentAccountNumber
+        }
+        if let scannedPresetID, let presetID = account.presetID, scannedPresetID != presetID {
+            return .differentBiller(presetID: scannedPresetID)
+        }
+        return nil
+    }
 }

@@ -137,21 +137,26 @@ struct TodayView: View {
                             instances: upcoming,
                             cutoff: currentCutoff,
                             showProfile: selectedProfileID.isEmpty,
+                            onView: { billToView = $0.bill },
                             onPay: pay,
                             onDelete: { instanceToDelete = $0 }
                         )
                     }
                     if !recentlyPaid.isEmpty {
-                        RecentlyPaidCard(instances: recentlyPaid, onUndo: { $0.markUnpaid(in: modelContext) })
+                        RecentlyPaidCard(
+                            instances: recentlyPaid,
+                            onView: { billToView = $0.bill },
+                            onUndo: { $0.markUnpaid(in: modelContext) }
+                        )
                     }
                 }
                 .padding(.horizontal, 20)
                 .padding(.vertical, 24)
             }
         }
+        .rowSwipeActionsContainer()
         .background(Theme.background)
-        .statusBarHidden()
-        .toolbar(.hidden, for: .navigationBar)
+        .ownsTopOfScreen()
         .overlay(alignment: .topTrailing) {
             // The profile switcher lives in the header now that the toolbar is gone.
             ProfileSwitcher(selectedID: $selectedProfileID)
@@ -243,20 +248,8 @@ private struct HeroSection: View {
     private var strong: Color { bill?.accentHex.map(Color.strongText(hex:)) ?? Theme.todayStrong }
     private var headerTint: Color { bill?.accentHex.map(Color.softTint(hex:)) ?? Theme.todayTint }
 
-    private var chip: (text: String, fg: Color, bg: Color) {
-        let calendar = Calendar.current
-        switch instance.status() {
-        case .due:
-            return ("DUE TODAY", Theme.warning, Theme.warningFill)
-        case .overdue:
-            let days = instance.daysOverdue()
-            return ("OVERDUE \(days) \(days == 1 ? "DAY" : "DAYS")", Theme.danger, Theme.dangerFill)
-        default:
-            let days = calendar.dateComponents(
-                [.day], from: calendar.startOfDay(for: .now), to: calendar.startOfDay(for: instance.dueDate)
-            ).day ?? 0
-            return ("DUE IN \(days) \(days == 1 ? "DAY" : "DAYS")", Theme.warning, Theme.warningFill)
-        }
+    private var chip: (text: String, foreground: Color, background: Color) {
+        BillStatusText.chip(for: instance)
     }
 
     /// "MON · NOV 2"
@@ -286,7 +279,7 @@ private struct HeroSection: View {
             Eyebrow(todayLabel, color: strong)
                 .padding(.top, 8)
 
-            StatusChip(text: chip.text, foreground: chip.fg, background: chip.bg)
+            StatusChip(text: chip.text, foreground: chip.foreground, background: chip.background)
 
             Text((bill?.name ?? "Bill").uppercased())
                 .font(.barlow(54, weight: .medium, relativeTo: .largeTitle))
@@ -342,6 +335,17 @@ private struct HeroSection: View {
                         .frame(maxWidth: .infinity, minHeight: 28)
                 }
                 .secondaryButton(tint: strong)
+
+                // The same actions as the long-press menu, so they can be found without it.
+                Menu {
+                    Button("Delete this bill", systemImage: "trash", role: .destructive, action: onDelete)
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.outfit(16, weight: .semibold))
+                        .frame(minWidth: 20, minHeight: 28)
+                }
+                .secondaryButton(tint: strong)
+                .accessibilityLabel("More")
             }
 
             DashedDivider(color: strong.opacity(0.4)).padding(.top, 6)
@@ -567,14 +571,7 @@ private struct CutoffCard: View {
                     .font(.outfit(14, relativeTo: .footnote))
                     .foregroundStyle(Theme.mutedInk)
             }
-            // One segment per bill, filled green once paid.
-            HStack(spacing: 6) {
-                ForEach(0..<min(summary.count, 10), id: \.self) { index in
-                    Capsule()
-                        .fill(index < summary.paidCount ? Theme.paid : Theme.track)
-                        .frame(height: 6)
-                }
-            }
+            progressBar
             Text("\(summary.paidCount) of \(summary.count) bills paid · \(summary.paidTotal.pesoString) so far")
                 .font(.outfit(13, relativeTo: .footnote))
                 .foregroundStyle(Theme.mutedInk)
@@ -582,6 +579,32 @@ private struct CutoffCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
         .accessibilityElement(children: .combine)
+    }
+
+    /// One segment per bill, filled green once paid. With more than 10 bills the segments get too
+    /// thin, so it becomes one bar filled by the share that's paid.
+    @ViewBuilder
+    private var progressBar: some View {
+        if summary.count <= 10 {
+            HStack(spacing: 6) {
+                ForEach(0..<summary.count, id: \.self) { index in
+                    Capsule()
+                        .fill(index < summary.paidCount ? Theme.paid : Theme.track)
+                        .frame(height: 6)
+                }
+            }
+        } else {
+            Capsule()
+                .fill(Theme.track)
+                .frame(height: 6)
+                .overlay(alignment: .leading) {
+                    GeometryReader { proxy in
+                        Capsule()
+                            .fill(Theme.paid)
+                            .frame(width: proxy.size.width * CGFloat(summary.paidCount) / CGFloat(summary.count))
+                    }
+                }
+        }
     }
 }
 
@@ -591,6 +614,7 @@ private struct UpcomingSection: View {
     let instances: [BillInstance]
     let cutoff: Cutoff?
     let showProfile: Bool
+    let onView: (BillInstance) -> Void
     let onPay: (BillInstance) -> Void
     let onDelete: (BillInstance) -> Void
 
@@ -606,6 +630,7 @@ private struct UpcomingSection: View {
                             instance: instance,
                             cutoff: cutoff,
                             showProfile: showProfile,
+                            onView: { onView(instance) },
                             onPay: { onPay(instance) },
                             onDelete: { onDelete(instance) }
                         )
@@ -625,6 +650,7 @@ private struct UpcomingCard: View {
     let instance: BillInstance
     let cutoff: Cutoff?
     let showProfile: Bool
+    let onView: () -> Void
     let onPay: () -> Void
     let onDelete: () -> Void
 
@@ -633,12 +659,37 @@ private struct UpcomingCard: View {
     private var isOverdue: Bool { instance.status() == .overdue }
 
     var body: some View {
+        // Tapping the card opens the bill. The pay button sits on top rather than inside it, so the
+        // two taps don't fight.
+        Button(action: onView) {
+            content.contentShape(.rect(cornerRadius: 20))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("Opens the bill")
+        .overlay(alignment: .topTrailing) {
+            Button(action: onPay) {
+                Image(systemName: "checkmark")
+                    .font(.body.weight(.semibold))
+                    .frame(width: 22, height: 22)
+            }
+            .buttonBorderShape(.circle)
+            .secondaryButton(tint: tint)
+            .padding(10)
+            .accessibilityLabel("Mark \(bill?.name ?? "bill") as paid")
+        }
+        .contextMenu {
+            Button("Mark as paid", systemImage: "checkmark.circle", action: onPay)
+            Button("Delete this bill", systemImage: "trash", role: .destructive, action: onDelete)
+        }
+    }
+
+    private var content: some View {
         VStack(alignment: .leading, spacing: 10) {
             if isOverdue {
-                StatusChip(text: "OVERDUE", foreground: Theme.danger, background: Theme.dangerFill)
+                StatusChip(text: String(localized: "Overdue"), foreground: Theme.danger, background: Theme.dangerFill)
             } else if let cutoff {
                 StatusChip(
-                    text: cutoff.contains(instance.dueDate) ? "THIS CUTOFF" : "NEXT CUTOFF",
+                    text: cutoff.contains(instance.dueDate) ? String(localized: "This cutoff") : String(localized: "Next cutoff"),
                     foreground: Theme.info, background: Theme.infoFill
                 )
             } else {
@@ -670,10 +721,6 @@ private struct UpcomingCard: View {
         }
         .frame(width: 270, alignment: .leading)
         .cardStyle()
-        .contextMenu {
-            Button("Mark as paid", systemImage: "checkmark.circle", action: onPay)
-            Button("Delete this bill", systemImage: "trash", role: .destructive, action: onDelete)
-        }
     }
 
     private func column(_ label: String, _ value: String, color: Color? = nil) -> some View {
@@ -692,6 +739,7 @@ private struct UpcomingCard: View {
 
 private struct RecentlyPaidCard: View {
     let instances: [BillInstance]
+    let onView: (BillInstance) -> Void
     let onUndo: (BillInstance) -> Void
 
     var body: some View {
@@ -701,30 +749,46 @@ private struct RecentlyPaidCard: View {
                 .foregroundStyle(Theme.ink)
 
             ForEach(instances) { instance in
-                HStack {
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(instance.bill?.name ?? "Bill")
-                            .font(.outfit(16, weight: .semibold, relativeTo: .body))
-                            .foregroundStyle(Theme.ink)
-                        Text(detail(instance))
-                            .font(.outfit(13, relativeTo: .footnote))
-                            .foregroundStyle(Theme.mutedInk)
-                    }
-                    Spacer()
-                    StatusChip(
-                        text: instance.wasPaidLate() ? "LATE" : "PAID",
-                        foreground: instance.wasPaidLate() ? Theme.warning : Theme.paid,
-                        background: instance.wasPaidLate() ? Theme.warningFill : Theme.paidFill
-                    )
+                Button { onView(instance) } label: {
+                    row(instance).contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the bill. Swipe left to undo the payment.")
+                .swipeActions(edge: .trailing) {
+                    Button("Undo", systemImage: "arrow.uturn.backward") { onUndo(instance) }
+                        .tint(Theme.warning)
                 }
                 .contextMenu {
                     Button("Undo payment", systemImage: "arrow.uturn.backward") { onUndo(instance) }
                 }
-                .accessibilityElement(children: .combine)
+                .accessibilityActions {
+                    Button("Undo payment") { onUndo(instance) }
+                }
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+    }
+
+    private func row(_ instance: BillInstance) -> some View {
+        let late = instance.wasPaidLate()
+        return HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(instance.bill?.name ?? "Bill")
+                    .font(.outfit(16, weight: .semibold, relativeTo: .body))
+                    .foregroundStyle(Theme.ink)
+                Text(detail(instance))
+                    .font(.outfit(13, relativeTo: .footnote))
+                    .foregroundStyle(Theme.mutedInk)
+            }
+            Spacer()
+            StatusChip(
+                text: late ? String(localized: "Late") : String(localized: "Paid"),
+                foreground: late ? Theme.warning : Theme.paid,
+                background: late ? Theme.warningFill : Theme.paidFill
+            )
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private func detail(_ instance: BillInstance) -> String {

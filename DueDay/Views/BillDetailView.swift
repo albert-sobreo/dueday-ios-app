@@ -17,6 +17,13 @@ struct BillDetailView: View {
     @State private var scannedNewBill: NewScan?
     @State private var instanceToDelete: BillInstance?
     @State private var deleteWhenClosed = false
+    @State private var showingAllHistory = false
+
+    /// How many payments the history shows before "Show all".
+    private static let historyPreviewCount = 6
+
+    /// The reminders you can turn on, in days before the due date.
+    private static let reminderChoices = [7, 3, 1, 0]
 
     /// A scan waiting to become a new bill on this account.
     private struct NewScan: Identifiable {
@@ -68,6 +75,7 @@ struct BillDetailView: View {
                 .padding(.vertical, 24)
             }
         }
+        .rowSwipeActionsContainer()
         .background(Theme.background)
         .toolbarBackground(.hidden, for: .navigationBar)
         .toolbar {
@@ -125,6 +133,16 @@ struct BillDetailView: View {
     private func delete(_ instance: BillInstance) {
         modelContext.delete(instance)
         instanceToDelete = nil
+        saveAndReschedule()
+    }
+
+    /// Marks a paid bill as unpaid again, e.g. after paying it by mistake. Its reminders come back.
+    private func undoPayment(_ instance: BillInstance) {
+        instance.markUnpaid(in: modelContext)
+        saveAndReschedule()
+    }
+
+    private func saveAndReschedule() {
         let context = modelContext
         Task {
             try? context.save()
@@ -282,12 +300,21 @@ struct BillDetailView: View {
     private func actions(for instance: BillInstance) -> some View {
         if instance.isPaid {
             VStack(spacing: 12) {
-                Label("Paid", systemImage: "checkmark.circle.fill")
-                    .font(.outfit(16, weight: .semibold))
-                    .foregroundStyle(Theme.paid)
-                    .frame(maxWidth: .infinity, minHeight: 28)
-                    .padding(.vertical, 8)
-                    .background(Theme.paidFill, in: .capsule)
+                HStack(spacing: 12) {
+                    Label("Paid", systemImage: "checkmark.circle.fill")
+                        .font(.outfit(16, weight: .semibold))
+                        .foregroundStyle(Theme.paid)
+                        .frame(maxWidth: .infinity, minHeight: 28)
+                        .padding(.vertical, 8)
+                        .background(Theme.paidFill, in: .capsule)
+                    Button { undoPayment(instance) } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                            .font(.outfit(16, weight: .semibold))
+                            .frame(minHeight: 28)
+                    }
+                    .secondaryButton(tint: strong)
+                    .accessibilityLabel("Undo payment")
+                }
                 if isVariable { newBillButtons }
             }
         } else {
@@ -413,19 +440,25 @@ struct BillDetailView: View {
 
     private var remindersCard: some View {
         VStack(spacing: 0) {
-            reminderRow(
-                title: "3 days before",
-                subtitle: reminderSubtitle(daysBefore: 3),
-                isOn: reminderBinding(3)
-            )
-            Divider().padding(.vertical, 10)
-            reminderRow(
-                title: "On due day",
-                subtitle: reminderSubtitle(daysBefore: 0),
-                isOn: reminderBinding(0)
-            )
+            ForEach(Self.reminderChoices, id: \.self) { days in
+                if days != Self.reminderChoices.first { Divider().padding(.vertical, 10) }
+                reminderRow(
+                    title: reminderTitle(daysBefore: days),
+                    subtitle: reminderSubtitle(daysBefore: days),
+                    isOn: reminderBinding(days)
+                )
+            }
         }
         .cardStyle()
+    }
+
+    private func reminderTitle(daysBefore days: Int) -> String {
+        switch days {
+        case 0: String(localized: "On due day")
+        case 1: String(localized: "The day before")
+        case 7: String(localized: "A week before")
+        default: String(inflecting: "^[\(days) day](inflect: true) before")
+        }
     }
 
     private func reminderRow(title: String, subtitle: String, isOn: Binding<Bool>) -> some View {
@@ -456,6 +489,8 @@ struct BillDetailView: View {
                 var offsets = Set(bill.reminderOffsets)
                 if isOn { offsets.insert(days) } else { offsets.remove(days) }
                 bill.reminderOffsets = offsets.sorted(by: >)
+                // Otherwise the change only takes effect the next time reminders are rebuilt.
+                saveAndReschedule()
             }
         )
     }
@@ -468,45 +503,75 @@ struct BillDetailView: View {
                 .font(.outfit(18, weight: .semibold, relativeTo: .headline))
                 .foregroundStyle(Theme.ink)
 
-            ForEach(bill.paidInstances.prefix(6)) { instance in
-                HStack(alignment: .center, spacing: 14) {
-                    // Sized so the capitals are as tall as the amount and the line under it together.
-                    // The fixed height keeps the row from growing to the font's full line height.
-                    Text(instance.dueDate.formatted(.dateTime.month(.abbreviated)).uppercased())
-                        .font(.barlow(42, weight: .semibold, relativeTo: .title))
-                        .foregroundStyle(strong)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                        .frame(width: 66, height: 36, alignment: .leading)
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(instance.amount?.pesoString ?? "—")
-                            .font(.outfit(16, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                        Text(paidDetail(instance))
-                            .font(.outfit(13))
-                            .foregroundStyle(Theme.mutedInk)
+            let paid = bill.paidInstances
+            ForEach(showingAllHistory ? paid : Array(paid.prefix(Self.historyPreviewCount))) { instance in
+                historyRow(instance)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if isVariable {
+                            Button("Delete", systemImage: "trash", role: .destructive) { instanceToDelete = instance }
+                        }
+                        Button("Undo", systemImage: "arrow.uturn.backward") { undoPayment(instance) }
+                            .tint(Theme.warning)
                     }
-                    Spacer()
-                    let late = instance.wasPaidLate()
-                    StatusChip(
-                        text: late ? "LATE" : "PAID",
-                        foreground: late ? Theme.warning : Theme.paid,
-                        background: late ? Theme.warningFill : Theme.paidFill
-                    )
-                }
-                .accessibilityElement(children: .combine)
-                .contentShape(.rect)
-                .contextMenu {
-                    if isVariable {
-                        Button("Delete This Bill", systemImage: "trash", role: .destructive) {
-                            instanceToDelete = instance
+                    .contextMenu {
+                        Button("Undo Payment", systemImage: "arrow.uturn.backward") { undoPayment(instance) }
+                        if isVariable {
+                            Button("Delete This Bill", systemImage: "trash", role: .destructive) {
+                                instanceToDelete = instance
+                            }
                         }
                     }
+                    .accessibilityActions {
+                        Button("Undo payment") { undoPayment(instance) }
+                        if isVariable {
+                            Button("Delete this bill") { instanceToDelete = instance }
+                        }
+                    }
+            }
+
+            if paid.count > Self.historyPreviewCount {
+                Button {
+                    withAnimation(.snappy) { showingAllHistory.toggle() }
+                } label: {
+                    Text(showingAllHistory ? "Show less" : "Show all \(paid.count)")
+                        .font(.outfit(15, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 28)
                 }
+                .secondaryButton(tint: strong)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .cardStyle()
+    }
+
+    private func historyRow(_ instance: BillInstance) -> some View {
+        HStack(alignment: .center, spacing: 14) {
+            // Sized so the capitals are as tall as the amount and the line under it together.
+            // The fixed height keeps the row from growing to the font's full line height.
+            Text(instance.dueDate.formatted(.dateTime.month(.abbreviated)).uppercased())
+                .font(.barlow(42, weight: .semibold, relativeTo: .title))
+                .foregroundStyle(strong)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(width: 66, height: 36, alignment: .leading)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(instance.amount?.pesoString ?? "—")
+                    .font(.outfit(16, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                Text(paidDetail(instance))
+                    .font(.outfit(13))
+                    .foregroundStyle(Theme.mutedInk)
+            }
+            Spacer()
+            let late = instance.wasPaidLate()
+            StatusChip(
+                text: late ? String(localized: "Late") : String(localized: "Paid"),
+                foreground: late ? Theme.warning : Theme.paid,
+                background: late ? Theme.warningFill : Theme.paidFill
+            )
+        }
+        .accessibilityElement(children: .combine)
+        .contentShape(.rect)
     }
 
     private func paidDetail(_ instance: BillInstance) -> String {
@@ -524,41 +589,39 @@ enum BillStatusText {
     /// Due-date pill colours by how soon the bill is due: blue when far, through teal and amber to
     /// orange and red.
     static func urgency(for dueDate: Date, now: Date = .now) -> (fill: Color, text: Color) {
-        let calendar = Calendar.current
-        let days = calendar.dateComponents(
-            [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: dueDate)
-        ).day ?? 0
-        // Each band has a light-mode and a dark-mode version: in dark mode the fill is lighter and
-        // the text dark, so it stays readable.
-        switch days {
-        case ..<1:    // due today or overdue
-            return (Color(light: 0xD32F2F, dark: 0xFF8A80), Color(light: 0xFFFFFF, dark: 0x3B0A07))
-        case 1...3:   // very soon
-            return (Color(light: 0xE8590C, dark: 0xFFA066), Color(light: 0xFFFFFF, dark: 0x3A1500))
-        case 4...7:   // this week
-            return (Color(light: 0xF59F00, dark: 0xFFD166), Color(light: 0x3A2600, dark: 0x3A2600))
-        case 8...14:  // a week or two out
-            return (Color(light: 0x00897B, dark: 0x5FD6C8), Color(light: 0xFFFFFF, dark: 0x03302B))
-        default:      // far away
-            return (Color(light: 0x1E88E5, dark: 0x8EC5FF), Color(light: 0xFFFFFF, dark: 0x06243F))
+        switch daysUntil(dueDate, now: now) {
+        case ..<1: Theme.urgencyNow        // due today or overdue
+        case 1...3: Theme.urgencySoon      // very soon
+        case 4...7: Theme.urgencyWeek      // this week
+        case 8...14: Theme.urgencyFortnight // a week or two out
+        default: Theme.urgencyLater        // far away
         }
     }
 
+    /// Whole days from today to the due date; negative once it's passed.
+    static func daysUntil(_ dueDate: Date, now: Date = .now) -> Int {
+        let calendar = Calendar.current
+        return calendar.dateComponents(
+            [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: dueDate)
+        ).day ?? 0
+    }
+
+    /// The status chip: red when overdue, amber when due today or within 3 days, and a calm blue
+    /// further out, so a bill weeks away doesn't look urgent. The wording is localizable, with the
+    /// day count inflected ("1 day", "2 days"); `StatusChip` uppercases it.
     static func chip(for instance: BillInstance, now: Date = .now) -> (text: String, foreground: Color, background: Color) {
         switch instance.status(now: now) {
         case .paid:
-            return ("PAID", Theme.paid, Theme.paidFill)
+            return (String(localized: "Paid"), Theme.paid, Theme.paidFill)
         case .due:
-            return ("DUE TODAY", Theme.warning, Theme.warningFill)
+            return (String(localized: "Due today"), Theme.warning, Theme.warningFill)
         case .overdue:
             let days = instance.daysOverdue(now: now)
-            return ("OVERDUE \(days) \(days == 1 ? "DAY" : "DAYS")", Theme.danger, Theme.dangerFill)
+            return (String(inflecting: "Overdue ^[\(days) day](inflect: true)"), Theme.danger, Theme.dangerFill)
         case .upcoming:
-            let calendar = Calendar.current
-            let days = calendar.dateComponents(
-                [.day], from: calendar.startOfDay(for: now), to: calendar.startOfDay(for: instance.dueDate)
-            ).day ?? 0
-            return ("DUE IN \(days) \(days == 1 ? "DAY" : "DAYS")", Theme.warning, Theme.warningFill)
+            let days = daysUntil(instance.dueDate, now: now)
+            let text = String(inflecting: "Due in ^[\(days) day](inflect: true)")
+            return days <= 3 ? (text, Theme.warning, Theme.warningFill) : (text, Theme.info, Theme.infoFill)
         }
     }
 }

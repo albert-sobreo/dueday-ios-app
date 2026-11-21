@@ -18,29 +18,29 @@ struct ContentView: View {
         // bubble at the trailing edge. Here it holds "Add a bill", and the search field the system
         // shows for it filters the billers.
         TabView(selection: $selection) {
-            // Icons only. The names stay as accessibility labels for VoiceOver.
+            // Each tab shows its name under the icon, so the less obvious ones (Bills, Month) are clear.
             Tab(value: AppTab.today) {
                 NavigationStack { TodayView() }
             } label: {
-                Image(systemName: "house").accessibilityLabel("Today")
+                Label("Today", systemImage: "house")
             }
 
             Tab(value: AppTab.bills) {
                 NavigationStack { BillsListView() }
             } label: {
-                Image(systemName: "list.bullet").accessibilityLabel("Bills")
+                Label("Bills", systemImage: "list.bullet")
             }
 
             Tab(value: AppTab.month) {
                 NavigationStack { MonthView() }
             } label: {
-                Image(systemName: "calendar").accessibilityLabel("Month")
+                Label("Month", systemImage: "calendar")
             }
 
             Tab(value: AppTab.settings) {
                 NavigationStack { SettingsView() }
             } label: {
-                Image(systemName: "gearshape").accessibilityLabel("Settings")
+                Label("Settings", systemImage: "gearshape")
             }
 
             Tab(value: AppTab.add, role: .search) {
@@ -50,8 +50,9 @@ struct ContentView: View {
                     onFinish: { selection = lastContentTab }
                 )
             } label: {
-                Image(systemName: "plus").accessibilityLabel("Add a bill")
+                Label("Add", systemImage: "plus")
             }
+            .accessibilityLabel("Add a bill")
         }
         .id(currencyCode)
         .tint(Theme.tabTint)

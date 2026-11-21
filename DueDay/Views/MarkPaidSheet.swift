@@ -29,31 +29,31 @@ struct MarkPaidSheet: View {
     }
 
     var body: some View {
-        ScrollView {
+        // The shared form screen: Cancel asks before losing what's entered, and the Confirm button
+        // stays pinned at the bottom however many payment methods there are.
+        FormScreen(
+            title: String(localized: "Mark as paid"),
+            primaryTitle: String(localized: "Confirm payment"),
+            primaryEnabled: (amount ?? 0) > 0,
+            onCancel: { dismiss() },
+            changeToken: [amountText, paidDate, referenceNumber, method?.title, keepAttachment] as [AnyHashable?],
+            onPrimary: save
+        ) {
             VStack(alignment: .leading, spacing: 20) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Eyebrow("Mark as paid")
-                        Text(title)
-                            .font(.barlow(44, relativeTo: .largeTitle))
-                            .foregroundStyle(strong)
-                            .lineLimit(2)
-                            .minimumScaleFactor(0.6)
-                    }
-                    Spacer()
-                    Button("Close", systemImage: "xmark") { dismiss() }
-                        .labelStyle(.iconOnly)
-                        .buttonStyle(.bordered)
-                        .buttonBorderShape(.circle)
-                        .tint(Theme.ink)
-                }
+                Text(title)
+                    .font(.barlow(44, relativeTo: .largeTitle))
+                    .foregroundStyle(strong)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
 
                 VStack(alignment: .leading, spacing: 6) {
                     Eyebrow("Amount paid")
                     HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(CurrencySetting.symbol).font(.barlow(44, weight: .medium)).foregroundStyle(Theme.ink)
+                        Text(CurrencySetting.symbol)
+                            .font(.barlow(44, weight: .medium, relativeTo: .largeTitle))
+                            .foregroundStyle(Theme.ink)
                         TextField("0.00", text: $amountText)
-                            .font(.barlow(44, weight: .medium))
+                            .font(.barlow(44, weight: .medium, relativeTo: .largeTitle))
                             .keyboardType(.decimalPad)
                     }
                     Rectangle().fill(Theme.ink).frame(height: 1.5)
@@ -99,21 +99,9 @@ struct MarkPaidSheet: View {
                     .toggleStyle(.switch)
                     .tint(Theme.toggleOn)
                 }
-
-                Button(action: save) {
-                    Label("Confirm payment", systemImage: "checkmark")
-                        .font(.outfit(17, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 36)
-                }
-                .primaryButton()
-                .disabled((amount ?? 0) <= 0)
             }
-            .padding(.horizontal, 20)
-            .padding(.bottom, 20)
-            // Extra room at the top so the title isn't crowded by the sheet's edge.
-            .padding(.top, 36)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(Theme.background)
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {
@@ -170,11 +158,11 @@ struct MarkPaidSheet: View {
                 Text(option.title).font(.outfit(15, weight: .semibold))
                 Text(option.subtitle).font(.outfit(12)).opacity(0.8)
             }
-            .foregroundStyle(isSelected ? Theme.onSelected : Theme.ink)
+            .foregroundStyle(isSelected ? FormStyle.onSelected : Theme.ink)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background {
-                if isSelected { RoundedRectangle(cornerRadius: 14).fill(Theme.selected) }
+                if isSelected { RoundedRectangle(cornerRadius: 14).fill(FormStyle.selectedFill) }
             }
             .glassSurface(cornerRadius: 14, enabled: !isSelected)
         }

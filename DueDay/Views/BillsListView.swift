@@ -79,6 +79,7 @@ struct BillsListView: View {
             .padding(.vertical, 8)
             .padding(.bottom, 24)
         }
+        .rowSwipeActionsContainer()
         .background(Theme.background)
         .navigationDestination(for: Bill.self) { BillDetailView(bill: $0) }
         .ownsTopOfScreen()
@@ -114,11 +115,24 @@ struct BillsListView: View {
                     BillCard(bill: bill)
                 }
                 .buttonStyle(.plain)
+                .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                    Button("Delete", systemImage: "trash", role: .destructive) { billToDelete = bill }
+                    if bill.amountType == .variable && !bill.isArchived {
+                        Button("Add a bill", systemImage: "plus") { accountToAddBill = bill }
+                            .tint(Theme.info)
+                    }
+                }
                 .contextMenu {
                     if bill.amountType == .variable && !bill.isArchived {
                         Button("Add a bill", systemImage: "plus") { accountToAddBill = bill }
                     }
                     Button("Delete", systemImage: "trash", role: .destructive) { billToDelete = bill }
+                }
+                .accessibilityActions {
+                    if bill.amountType == .variable && !bill.isArchived {
+                        Button("Add a bill") { accountToAddBill = bill }
+                    }
+                    Button("Delete") { billToDelete = bill }
                 }
             }
         }
@@ -177,7 +191,7 @@ private struct BillCard: View {
     @ViewBuilder
     private func trailing(next: BillInstance?) -> some View {
         if bill.isArchived {
-            StatusChip(text: "ARCHIVED", foreground: Theme.mutedInk, background: Theme.track)
+            StatusChip(text: String(localized: "Archived"), foreground: Theme.mutedInk, background: Theme.track)
         } else if let next {
             VStack(alignment: .trailing, spacing: 2) {
                 Text(next.dueDate.formatted(.dateTime.month(.abbreviated).day()).uppercased())
@@ -188,9 +202,9 @@ private struct BillCard: View {
                     .foregroundStyle(Theme.mutedInk)
             }
         } else if bill.isAwaitingBill() {
-            StatusChip(text: "BILL DUE?", foreground: Theme.warning, background: Theme.warningFill)
+            StatusChip(text: String(localized: "Bill due?"), foreground: Theme.warning, background: Theme.warningFill)
         } else if bill.amountType == .variable {
-            StatusChip(text: "ADD BILL", foreground: Theme.accent, background: Theme.accent.opacity(0.12))
+            StatusChip(text: String(localized: "Add bill"), foreground: Theme.accent, background: Theme.accent.opacity(0.12))
         } else {
             Text("All paid")
                 .font(.outfit(13, relativeTo: .footnote))
