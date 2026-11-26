@@ -26,8 +26,11 @@ enum CurrencySetting {
         code == "PHP" ? Locale(identifier: "en_PH") : .current
     }
 
-    /// "₱", "$" and so on.
-    static var symbol: String {
+    /// "₱", "$" and so on, for the selected currency.
+    static var symbol: String { symbol(for: code) }
+
+    /// "₱", "$" and so on, for a code.
+    static func symbol(for code: String) -> String {
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
         formatter.currencyCode = code

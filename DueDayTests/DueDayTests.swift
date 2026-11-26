@@ -277,3 +277,42 @@ struct AmountParsingTests {
         #expect("abc".parsedAmount == nil)
     }
 }
+
+// MARK: - Currency
+
+/// Touches the shared currency setting, so these run one at a time and put it back afterwards.
+@Suite(.serialized)
+struct CurrencySettingTests {
+    private func withCurrency(_ code: String, _ body: () -> Void) {
+        let defaults = UserDefaults.standard
+        let previous = defaults.string(forKey: CurrencySetting.storageKey)
+        defaults.set(code, forKey: CurrencySetting.storageKey)
+        defer { defaults.set(previous, forKey: CurrencySetting.storageKey) }
+        body()
+    }
+
+    @Test func pesosShowAsPesoSign() {
+        #expect(CurrencySetting.symbol(for: "PHP") == "₱")
+    }
+
+    @Test func changingCurrencyKeepsTheAmount() {
+        let amount: Decimal = 2_345.60
+        withCurrency("PHP") {
+            #expect(amount.currencyString.contains("₱"))
+            #expect(amount.currencyString.contains("2,345.60"))
+        }
+        withCurrency("JPY") {
+            #expect(CurrencySetting.code == "JPY")
+            #expect(!amount.currencyString.contains("₱"))
+            // Shown in yen, not converted: the number is still 2,345 or so, not a yen rate of it.
+            #expect(amount.currencyString.contains("2,34"))
+        }
+        #expect(amount == 2_345.60)
+    }
+
+    @Test func parsingIgnoresTheSelectedSymbol() {
+        withCurrency("USD") {
+            #expect("\(CurrencySetting.symbol)1,000".parsedAmount == 1_000)
+        }
+    }
+}

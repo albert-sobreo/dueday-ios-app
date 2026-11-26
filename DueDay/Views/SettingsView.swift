@@ -216,6 +216,20 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Currency", selection: $currencyCode) {
+                    ForEach(currencyChoices, id: \.self) { code in
+                        Text("\(CurrencySetting.symbol(for: code))  \(CurrencySetting.name(for: code))")
+                            .tag(code)
+                    }
+                }
+                .pickerStyle(.navigationLink)
+            } header: {
+                Text("Currency")
+            } footer: {
+                Text("Changes the symbol shown on amounts. Amounts you've entered stay the same and aren't converted.")
+            }
+
+            Section {
                 Toggle("Lock DueDay", isOn: lockToggle)
                     .tint(Theme.toggleOn)
             } header: {
