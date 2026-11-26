@@ -39,6 +39,14 @@ final class Bill {
     var remindsBeforeUsualDue: Bool = true
     /// Show a Live Activity on the lock screen on the due date until the bill is paid.
     var liveActivityEnabled: Bool = false
+    /// Total payments in an installment plan, e.g. 24 for a phone paid over two years. Nil for an
+    /// ordinary bill that repeats forever.
+    var installmentCount: Int?
+    /// Payments of the plan made before it was added to DueDay, e.g. 5 when the next one is the 6th.
+    var installmentsPaidBefore: Int = 0
+    /// The plan's total price, when it was entered as a total rather than per payment. The last
+    /// payment absorbs the rounding, so the payments add up to exactly this.
+    var installmentTotal: Decimal?
     var isArchived: Bool = false
     var profile: Profile?
 

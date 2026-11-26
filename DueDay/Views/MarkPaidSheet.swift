@@ -16,6 +16,7 @@ struct MarkPaidSheet: View {
     @State private var paidDate = Date()
     @State private var referenceNumber = ""
     @State private var keepAttachment = true
+    @State private var showingPaidOff = false
 
     private var amount: Decimal? { amountText.parsedAmount }
     private var strong: Color { Theme.detailStrong }
@@ -25,6 +26,13 @@ struct MarkPaidSheet: View {
     private var title: String {
         let name = instance.bill?.name ?? "Bill"
         let month = instance.dueDate.formatted(.dateTime.month(.abbreviated))
+        // An installment shows which payment it is: "IPHONE · 7 OF 24", or "FINAL PAYMENT".
+        if instance.isFinalInstallment {
+            return "\(name) · \(String(localized: "Final payment"))".uppercased()
+        }
+        if let label = instance.installmentLabel {
+            return "\(name) · \(label)".uppercased()
+        }
         return "\(name) · \(month)".uppercased()
     }
 
@@ -110,6 +118,11 @@ struct MarkPaidSheet: View {
                 amountText = "\(existing)"
             }
         }
+        .alert("Paid off!", isPresented: $showingPaidOff) {
+            Button("Done") { dismiss() }
+        } message: {
+            Text("That was the last payment for \(instance.bill?.name ?? "this bill"). It's moved to Paid off on your Bills tab.")
+        }
         .alert("New payment method", isPresented: $isAddingMethod) {
             TextField("Name, e.g. Cash", text: $newMethodName)
             Button("Add") { addCustomMethod() }
@@ -180,6 +193,11 @@ struct MarkPaidSheet: View {
             in: modelContext
         )
         if !keepAttachment { instance.attachment = nil }
+        // Paying the last installment closes the plan; celebrate before closing the sheet.
+        if let bill = instance.bill, bill.isInstallment, bill.isPaidOff {
+            showingPaidOff = true
+            return
+        }
         dismiss()
     }
 }

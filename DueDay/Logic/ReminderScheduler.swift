@@ -187,8 +187,15 @@ enum ReminderScheduler {
         case 1: when = "Due tomorrow"
         default: when = "Due in \(daysBefore) days"
         }
-        if let amount = instance.amount { return "\(when) · \(amount.currencyString)" }
-        return when
+        var parts = [when]
+        if let amount = instance.amount { parts.append(amount.currencyString) }
+        // "Due in 3 days · ₱2,000.00 · Final payment" or "… · Payment 7 of 24".
+        if instance.isFinalInstallment {
+            parts.append(String(localized: "Final payment"))
+        } else if let label = instance.installmentLabel {
+            parts.append(String(localized: "Payment \(label)"))
+        }
+        return parts.joined(separator: " · ")
     }
 
     private static func overdueBody(for instance: BillInstance, daysLate: Int) -> String {

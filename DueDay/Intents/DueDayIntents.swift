@@ -150,6 +150,12 @@ nonisolated struct MarkBillPaidIntent: AppIntent {
         try? context.save()
         await ReminderScheduler.reschedule(in: context)
         let amount = next.amount?.currencyString ?? ""
+        if account.isInstallment && account.isPaidOff {
+            return .result(dialog: "Marked \(account.name) as paid. \(amount) That was the last payment, so it's paid off.")
+        }
+        if let label = next.installmentLabel {
+            return .result(dialog: "Marked payment \(label) for \(account.name) as paid. \(amount)")
+        }
         return .result(dialog: "Marked \(account.name) as paid. \(amount)")
     }
 }

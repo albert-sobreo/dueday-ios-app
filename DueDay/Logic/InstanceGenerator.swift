@@ -45,6 +45,8 @@ enum InstanceGenerator {
     ) {
         // Variable bills (like electricity) are added by hand when they arrive, never generated.
         guard !bill.isArchived, bill.amountType == .fixed else { return }
+        // A finished installment plan has nothing left to generate.
+        if bill.isInstallment && bill.isPaidOff { return }
 
         // A one-time bill has a single instance, on its start date's month.
         if bill.recurrence == .once {
@@ -76,8 +78,12 @@ enum InstanceGenerator {
         // Months are counted as an absolute index so stepping across years is simple arithmetic.
         let startIndex = startYear * 12 + (startMonth - 1)
         let currentIndex = currentYear * 12 + (currentMonth - 1)
-        let lastIndex = currentIndex + monthsAhead
         let step = bill.monthStep
+        var lastIndex = currentIndex + monthsAhead
+        // An installment plan stops at its last payment.
+        if bill.isInstallment {
+            lastIndex = min(lastIndex, startIndex + (bill.installmentOccurrences - 1) * step)
+        }
 
         let existingKeys = Set((bill.instances ?? []).map(\.periodKey))
 
@@ -96,8 +102,14 @@ enum InstanceGenerator {
                    year: year, month: month, dueDay: bill.dueDay,
                    weekendRule: bill.weekendRule, calendar: calendar
                ) {
-                let amount = bill.amountType == .fixed ? bill.defaultAmount : nil
+                var amount = bill.amountType == .fixed ? bill.defaultAmount : nil
+                var number: Int?
+                if bill.isInstallment {
+                    number = bill.installmentNumber(forOccurrence: (index - startIndex) / step)
+                    amount = number.flatMap(bill.installmentAmount(forNumber:))
+                }
                 let instance = BillInstance(bill: bill, dueDate: due, periodKey: key, amount: amount)
+                instance.installmentNumber = number
                 context.insert(instance)
             }
             index += step
@@ -130,11 +142,20 @@ enum InstanceGenerator {
         let amount = bill.defaultAmount
 
         while due < horizon {
+            // Which occurrence this is, counted from the first due date, for installment numbers.
+            let occurrence = (calendar.dateComponents([.day], from: anchor, to: due).day ?? 0) / step
+            if bill.isInstallment && occurrence >= bill.installmentOccurrences { break }
             let key = bill.periodKey(for: due, calendar: calendar)
             if !existingKeys.contains(key) {
                 // The key follows the scheduled day, so a weekend shift can't make a duplicate later.
                 let shifted = DueDateCalculator.applyWeekendRule(bill.weekendRule, to: due, calendar: calendar)
-                context.insert(BillInstance(bill: bill, dueDate: shifted, periodKey: key, amount: amount))
+                let instance = BillInstance(bill: bill, dueDate: shifted, periodKey: key, amount: amount)
+                if bill.isInstallment {
+                    let number = bill.installmentNumber(forOccurrence: occurrence)
+                    instance.installmentNumber = number
+                    instance.amount = bill.installmentAmount(forNumber: number)
+                }
+                context.insert(instance)
             }
             guard let next = calendar.date(byAdding: .day, value: step, to: due) else { break }
             due = next

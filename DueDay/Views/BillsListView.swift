@@ -31,7 +31,10 @@ struct BillsListView: View {
     var body: some View {
         let inProfile = bills.filter { $0.isIn(profileID: selectedProfileID) }
         let active = inProfile.filter { !$0.isArchived }
-        let archived = inProfile.filter(\.isArchived)
+        let archivedAll = inProfile.filter(\.isArchived)
+        // Finished installment plans get their own section, apart from bills archived by hand.
+        let paidOff = archivedAll.filter { $0.isInstallment && $0.isPaidOff }
+        let archived = archivedAll.filter { !($0.isInstallment && $0.isPaidOff) }
         // Only built when it's needed: for the filter chips and the lists of bills.
         let engine = makeEngine(activeBills: active)
 
@@ -72,6 +75,7 @@ struct BillsListView: View {
                         if !items.isEmpty { section(category.title, items) }
                     }
 
+                    if !paidOff.isEmpty { section("Paid off", paidOff) }
                     if !archived.isEmpty { section("Archived", archived) }
                 }
             }
@@ -154,6 +158,8 @@ private struct BillCard: View {
         if let account = bill.maskedAccountNumber { parts.append(account) }
         if bill.amountType == .variable {
             parts.append("Variable")
+        } else if bill.isInstallment, let count = bill.installmentCount {
+            parts.append(String(localized: "\(bill.installmentsPaid) of \(count) paid"))
         } else if bill.recurrence == .once {
             parts.append("One-time")
         } else {
@@ -176,6 +182,11 @@ private struct BillCard: View {
                     .font(.outfit(13, relativeTo: .footnote))
                     .foregroundStyle(Theme.mutedInk)
                     .lineLimit(1)
+                if bill.isInstallment {
+                    InstallmentProgressBar(progress: bill.installmentProgress, tint: bill.displayColor)
+                        .frame(maxWidth: 160)
+                        .padding(.top, 4)
+                }
             }
 
             Spacer(minLength: 8)
@@ -190,7 +201,9 @@ private struct BillCard: View {
 
     @ViewBuilder
     private func trailing(next: BillInstance?) -> some View {
-        if bill.isArchived {
+        if bill.isArchived && bill.isInstallment && bill.isPaidOff {
+            StatusChip(text: String(localized: "Paid off"), foreground: Theme.paid, background: Theme.paidFill)
+        } else if bill.isArchived {
             StatusChip(text: String(localized: "Archived"), foreground: Theme.mutedInk, background: Theme.track)
         } else if let next {
             VStack(alignment: .trailing, spacing: 2) {
