@@ -47,6 +47,7 @@ struct NewAccountView: View {
     @State private var colorHex = ColorPalette.choices[0]
     @State private var logoData: Data?
     @State private var loaded = false
+    @State private var installment = InstallmentDraft()
 
     @Query private var customProviders: [CustomProvider]
 
@@ -55,7 +56,9 @@ struct NewAccountView: View {
 
     private var canSave: Bool {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
-        return isVariable || (amountText.parsedAmount ?? 0) > 0
+        if isVariable { return true }
+        guard (amountText.parsedAmount ?? 0) > 0 else { return false }
+        return recurrence == .once || installment.isValid()
     }
 
     var body: some View {
@@ -69,7 +72,7 @@ struct NewAccountView: View {
                 name, accountNumber, amountText, billingPeriod, colorHex,
                 profile?.id, category, amountType, recurrence, interval, startDate, weekendRule,
                 reminderOffsets.sorted(), paymentMethod?.title, billDueDate, rememberProvider, logoData,
-                usualDueDay, remindsBeforeUsualDue, nudgeEnabled, expectedDay,
+                usualDueDay, remindsBeforeUsualDue, nudgeEnabled, expectedDay, installment,
             ] as [AnyHashable?],
             onPrimary: save
         ) {
@@ -81,6 +84,12 @@ struct NewAccountView: View {
                 monthlyCard
             } else {
                 scheduleCard
+                if recurrence != .once {
+                    InstallmentCard(
+                        draft: $installment, amount: amountText.parsedAmount, startDate: startDate,
+                        recurrence: recurrence, interval: interval, weekendRule: weekendRule
+                    )
+                }
             }
             logoCard
             colourCard
@@ -164,7 +173,7 @@ struct NewAccountView: View {
         ) {
             ChipGrid(options: AmountType.allCases, selected: $amountType, title: { $0.title })
             if !isVariable {
-                amountField("Amount")
+                amountField(recurrence == .once ? "Amount" : installment.amountLabel)
             }
         }
     }
@@ -388,6 +397,8 @@ struct NewAccountView: View {
         bill.reminderOffsets = reminderOffsets.sorted(by: >)
         bill.paymentChoice = paymentMethod
         bill.profile = profile
+        // Sets the amount, split per payment when a plan's total price was entered.
+        if !isVariable { installment.apply(to: bill, amount: enteredAmount) }
         if isVariable {
             bill.usualDueDay = usualDueDay
             bill.remindsBeforeUsualDue = remindsBeforeUsualDue

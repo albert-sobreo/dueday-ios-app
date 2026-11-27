@@ -34,11 +34,21 @@ struct EditBillView: View {
     @State private var loadedDueDay = 1
     @State private var showingAddEntry = false
     @State private var confirmingDelete = false
+    @State private var installment = InstallmentDraft()
 
     private var isVariable: Bool { bill.amountType == .variable }
 
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && (isVariable || (amountText.parsedAmount ?? 0) > 0)
+        guard !name.trimmingCharacters(in: .whitespaces).isEmpty else { return false }
+        if isVariable { return true }
+        guard (amountText.parsedAmount ?? 0) > 0 else { return false }
+        return recurrence == .once || installment.isValid(minimumCount: minimumInstallments)
+    }
+
+    /// An installment plan can't have fewer payments than the highest one already paid.
+    private var minimumInstallments: Int {
+        let highestPaid = (bill.instances ?? []).filter(\.isPaid).compactMap(\.installmentNumber).max() ?? 0
+        return max(2, highestPaid)
     }
 
     var body: some View {
@@ -50,7 +60,7 @@ struct EditBillView: View {
             changeToken: [
                 name, accountNumber, amountText, colorHex, profile?.id, category, recurrence, interval,
                 startDate, weekendRule, reminderOffsets.sorted(), paymentMethod?.title, logoData,
-                nudgeEnabled, expectedDay, remindsBeforeUsualDue, usualDueDay,
+                nudgeEnabled, expectedDay, remindsBeforeUsualDue, usualDueDay, installment,
             ] as [AnyHashable?],
             onPrimary: save
         ) {
@@ -62,6 +72,13 @@ struct EditBillView: View {
             } else {
                 amountCard
                 scheduleCard
+                if recurrence != .once {
+                    InstallmentCard(
+                        draft: $installment, amount: amountText.parsedAmount, startDate: startDate,
+                        recurrence: recurrence, interval: interval, weekendRule: weekendRule,
+                        minimumCount: minimumInstallments
+                    )
+                }
             }
             FormCard(
                 title: "Logo",
@@ -166,6 +183,9 @@ struct EditBillView: View {
 
     private var amountCard: some View {
         FormCard(title: "Amount", symbol: "banknote") {
+            if recurrence != .once && installment.isOn {
+                FieldLabel(installment.amountLabel)
+            }
             HStack(spacing: 6) {
                 Text(CurrencySetting.symbol).font(.barlow(28, weight: .medium)).foregroundStyle(Theme.ink)
                 TextField("0.00", text: $amountText)
@@ -255,7 +275,9 @@ struct EditBillView: View {
         name = bill.name
         category = bill.category
         accountNumber = bill.accountNumber ?? ""
-        amountText = bill.defaultAmount.map { "\($0)" } ?? ""
+        // A plan entered as a total shows its total, the amount that was typed.
+        amountText = (bill.installmentTotal ?? bill.defaultAmount).map { "\($0)" } ?? ""
+        installment = InstallmentDraft(bill: bill)
         recurrence = bill.recurrence
         interval = max(bill.recurrenceInterval, 2)
         // Show the start month on the bill's real due day (older bills stored a different day).
@@ -310,13 +332,18 @@ struct EditBillView: View {
         if logoData != originalLogoData { bill.logoData = logoData }
 
         if !isVariable {
-            bill.defaultAmount = amountText.parsedAmount
+            let wasPaidOff = bill.isInstallment && bill.isPaidOff
             bill.recurrence = recurrence
             bill.recurrenceInterval = recurrence == .everyNMonths ? interval : 1
             bill.startDate = startDate
             // The due day always comes from the picked date.
             bill.dueDay = Calendar.current.component(.day, from: startDate)
             bill.weekendRule = weekendRule
+            installment.apply(to: bill, amount: amountText.parsedAmount)
+            // A paid-off plan given more payments, or turned back into a repeating bill, is active again.
+            if wasPaidOff, bill.isArchived, !bill.isPaidOff {
+                bill.isArchived = false
+            }
             InstanceGenerator.regenerate(for: bill, in: modelContext)
         }
         dismiss()

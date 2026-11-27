@@ -259,9 +259,11 @@ private struct HeroSection: View {
         return "\(weekday) · \(monthDay)"
     }
 
-    /// "ELECTRICITY"
+    /// "ELECTRICITY", or "INTERNET & PHONE · 7 OF 24" for an installment.
     private var subtitle: String {
-        (bill?.category.title ?? "").uppercased()
+        var parts = [bill?.category.title ?? ""]
+        if let label = instance.installmentLabel { parts.append(label) }
+        return parts.joined(separator: " · ").uppercased()
     }
 
     /// Pill colours by how soon the bill is due: blue when far, through teal and amber to orange and red.
@@ -429,6 +431,7 @@ private struct AlsoRow: View {
     private var detail: String {
         var parts: [String] = []
         parts.append(instance.amount?.pesoString ?? "Amount varies")
+        if let label = instance.installmentLabel { parts.append(label) }
         if let method = instance.bill?.paymentChoice { parts.append(method.title) }
         return parts.joined(separator: " · ")
     }
@@ -703,7 +706,10 @@ private struct UpcomingCard: View {
                     .foregroundStyle(tint)
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
-                Text((showProfile ? bill?.profile?.name : bill?.category.title)?.uppercased() ?? "")
+                Text(
+                    [(showProfile ? bill?.profile?.name : bill?.category.title), instance.installmentLabel]
+                        .compactMap { $0 }.joined(separator: " · ").uppercased()
+                )
                     .font(.outfit(12, weight: .medium, relativeTo: .caption))
                     .tracking(1.4)
                     .foregroundStyle(tint.opacity(0.85))

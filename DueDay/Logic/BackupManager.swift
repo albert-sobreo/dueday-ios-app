@@ -68,6 +68,10 @@ struct BackupFile: Codable {
         var liveActivityEnabled: Bool
         var isArchived: Bool
         var profileID: UUID?
+        // Installment plans. Optional so backups made before them still import.
+        var installmentCount: Int?
+        var installmentsPaidBefore: Int?
+        var installmentTotal: String?
     }
 
     struct InstanceRecord: Codable {
@@ -80,6 +84,7 @@ struct BackupFile: Codable {
         var isPaid: Bool
         var billingPeriod: String?
         var attachment: Data?
+        var installmentNumber: Int?
     }
 
     struct PaymentRecord: Codable {
@@ -163,7 +168,9 @@ enum BackupManager {
                 defaultPaymentMethod: $0.defaultPaymentMethod, customPaymentName: $0.customPaymentName,
                 expectedDay: $0.expectedDay, usualDueDay: $0.usualDueDay,
                 remindsBeforeUsualDue: $0.remindsBeforeUsualDue, liveActivityEnabled: $0.liveActivityEnabled,
-                isArchived: $0.isArchived, profileID: $0.profile?.id
+                isArchived: $0.isArchived, profileID: $0.profile?.id,
+                installmentCount: $0.installmentCount, installmentsPaidBefore: $0.installmentsPaidBefore,
+                installmentTotal: text($0.installmentTotal)
             )
         }
         file.instances = try context.fetch(FetchDescriptor<BillInstance>()).compactMap { instance in
@@ -171,7 +178,8 @@ enum BackupManager {
             return .init(
                 id: instance.id, billID: billID, dueDate: instance.dueDate, createdAt: instance.createdAt,
                 periodKey: instance.periodKey, amount: text(instance.amount), isPaid: instance.isPaid,
-                billingPeriod: instance.billingPeriod, attachment: instance.attachment
+                billingPeriod: instance.billingPeriod, attachment: instance.attachment,
+                installmentNumber: instance.installmentNumber
             )
         }
         file.payments = try context.fetch(FetchDescriptor<Payment>()).compactMap { payment in
@@ -276,6 +284,9 @@ enum BackupManager {
             bill.liveActivityEnabled = record.liveActivityEnabled
             bill.isArchived = record.isArchived
             bill.profile = record.profileID.flatMap { profilesByID[$0] }
+            bill.installmentCount = record.installmentCount
+            bill.installmentsPaidBefore = record.installmentsPaidBefore ?? 0
+            bill.installmentTotal = decimal(record.installmentTotal)
             context.insert(bill)
             billsByID[record.id] = bill
             summary.billsAdded += 1
@@ -292,6 +303,7 @@ enum BackupManager {
             instance.isPaid = record.isPaid
             instance.billingPeriod = record.billingPeriod
             instance.attachment = record.attachment
+            instance.installmentNumber = record.installmentNumber
             context.insert(instance)
             instancesByID[record.id] = instance
         }

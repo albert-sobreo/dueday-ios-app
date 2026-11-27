@@ -18,6 +18,7 @@ struct BillDetailView: View {
     @State private var instanceToDelete: BillInstance?
     @State private var deleteWhenClosed = false
     @State private var showingAllHistory = false
+    @State private var showingPayOff = false
 
     /// How many payments the history shows before "Show all".
     private static let historyPreviewCount = 6
@@ -67,7 +68,11 @@ struct BillDetailView: View {
             VStack(spacing: 0) {
                 header
                 VStack(spacing: 16) {
-                    if chartPoints.count > 0 { chartCard }
+                    if bill.isInstallment {
+                        InstallmentProgressCard(bill: bill, tint: strong) { showingPayOff = true }
+                    }
+                    // An installment's amount doesn't change, so its trend chart says nothing.
+                    if chartPoints.count > 0 && !bill.isInstallment { chartCard }
                     remindersCard
                     if !bill.paidInstances.isEmpty { historyCard }
                 }
@@ -124,6 +129,7 @@ struct BillDetailView: View {
         }
         .sheet(isPresented: $showingAddEntry) { AddBillEntrySheet(bill: bill) }
         .sheet(item: $instanceToPay) { MarkPaidSheet(instance: $0) }
+        .sheet(isPresented: $showingPayOff) { PayOffSheet(bill: bill) }
         .onDisappear {
             if deleteWhenClosed { modelContext.delete(bill) }
         }
@@ -247,6 +253,10 @@ struct BillDetailView: View {
 
     private func factsRow(for instance: BillInstance) -> some View {
         HStack(alignment: .top, spacing: 14) {
+            if let label = instance.installmentLabel {
+                fact("Payment", label.uppercased())
+                Divider().frame(height: 34)
+            }
             if let period = instance.billingPeriod {
                 fact("Period", period.uppercased())
                 Divider().frame(height: 34)
@@ -576,6 +586,9 @@ struct BillDetailView: View {
 
     private func paidDetail(_ instance: BillInstance) -> String {
         var parts: [String] = []
+        if let number = instance.installmentNumber, bill.isInstallment {
+            parts.append(String(localized: "Payment \(number)"))
+        }
         if let date = instance.latestPayment?.paidDate {
             parts.append("Paid \(date.formatted(.dateTime.month(.abbreviated).day()))")
         }

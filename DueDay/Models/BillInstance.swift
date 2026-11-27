@@ -15,6 +15,8 @@ final class BillInstance {
     var amount: Decimal?
     var isPaid: Bool = false
     var billingPeriod: String?
+    /// For a bill on an installment plan: which payment this is, e.g. 7 of 24.
+    var installmentNumber: Int?
     @Attribute(.externalStorage) var attachment: Data?
 
     @Relationship(deleteRule: .cascade, inverse: \Payment.instance)
@@ -87,6 +89,8 @@ final class BillInstance {
         context.insert(payment)
         self.amount = amount
         isPaid = true
+        // Paying the last installment closes the plan.
+        bill?.closeIfPaidOff()
         return payment
     }
 
@@ -101,9 +105,27 @@ final class BillInstance {
 
     /// Reverts a paid instance, e.g. after a mistaken tap.
     func markUnpaid(in context: ModelContext) {
+        let reopensPlan = bill.map { $0.isInstallment && $0.isArchived && $0.isPaidOff } ?? false
         for payment in payments ?? [] {
             context.delete(payment)
         }
         isPaid = false
+        // Undoing a paid-off plan's last payment puts the plan back on the Bills tab.
+        if reopensPlan, let bill {
+            bill.isArchived = false
+            InstanceGenerator.generate(for: bill, in: context)
+        }
+    }
+
+    /// "7 of 24" for a payment on an installment plan, otherwise nil.
+    var installmentLabel: String? {
+        guard let installmentNumber, let bill, bill.isInstallment, let count = bill.installmentCount else { return nil }
+        return String(localized: "\(installmentNumber) of \(count)")
+    }
+
+    /// True for the last payment of an installment plan.
+    var isFinalInstallment: Bool {
+        guard let installmentNumber, let bill, bill.isInstallment else { return false }
+        return installmentNumber == bill.installmentCount
     }
 }
