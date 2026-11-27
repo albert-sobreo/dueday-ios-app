@@ -17,7 +17,7 @@ struct EditInstanceSheet: View {
         FormScreen(
             title: instance.bill?.name ?? "Edit bill",
             primaryTitle: "Save",
-            primaryEnabled: (amount ?? 0) > 0,
+            primaryEnabled: amount.map { $0 >= 0 } ?? false,
             onCancel: { dismiss() },
             changeToken: [amountText, dueDate, billingPeriod] as [AnyHashable],
             onPrimary: save

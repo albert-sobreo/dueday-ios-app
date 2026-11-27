@@ -6,6 +6,10 @@
 	<array>
 		<string>com.albert.dueday.refresh</string>
 	</array>
+	<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>katherine</string>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

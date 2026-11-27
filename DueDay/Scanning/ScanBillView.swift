@@ -90,7 +90,7 @@ struct ScanBillView: View {
     }
 
     private var canSave: Bool {
-        !name.trimmingCharacters(in: .whitespaces).isEmpty && (amount ?? 0) > 0
+        !name.trimmingCharacters(in: .whitespaces).isEmpty && (amount.map { $0 >= 0 } ?? false)
     }
 
     var body: some View {

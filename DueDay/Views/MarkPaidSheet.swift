@@ -16,7 +16,14 @@ struct MarkPaidSheet: View {
     @State private var paidDate = Date()
     @State private var referenceNumber = ""
     @State private var keepAttachment = true
+<<<<<<< Updated upstream
     @State private var showingPaidOff = false
+=======
+    /// Katherine: Expense Tracker is installed, so the payment can be logged there too.
+    @State private var canLogInKatherine = false
+    @AppStorage("logInKatherine") private var logInKatherine = true
+    @Environment(\.openURL) private var openURL
+>>>>>>> Stashed changes
 
     private var amount: Decimal? { amountText.parsedAmount }
     private var strong: Color { Theme.detailStrong }
@@ -42,7 +49,7 @@ struct MarkPaidSheet: View {
         FormScreen(
             title: String(localized: "Mark as paid"),
             primaryTitle: String(localized: "Confirm payment"),
-            primaryEnabled: (amount ?? 0) > 0,
+            primaryEnabled: amount.map { $0 >= 0 } ?? false,
             onCancel: { dismiss() },
             changeToken: [amountText, paidDate, referenceNumber, method?.title, keepAttachment] as [AnyHashable?],
             onPrimary: save
@@ -100,6 +107,17 @@ struct MarkPaidSheet: View {
                     }
                 }
 
+                if canLogInKatherine {
+                    Toggle(isOn: $logInKatherine) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Log in Katherine").font(.outfit(15))
+                            Text("Opens a new expense there, filled in.").font(.outfit(12)).opacity(0.7)
+                        }
+                    }
+                    .toggleStyle(.switch)
+                    .tint(Theme.toggleOn)
+                }
+
                 if instance.attachment != nil {
                     Toggle(isOn: $keepAttachment) {
                         Text("Attach the scanned bill to this payment").font(.outfit(15))
@@ -113,6 +131,7 @@ struct MarkPaidSheet: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .onAppear {
+            canLogInKatherine = KatherineLink.isAvailable
             method = instance.bill?.paymentChoice
             if let existing = instance.amount {
                 amountText = "\(existing)"
@@ -193,11 +212,30 @@ struct MarkPaidSheet: View {
             in: modelContext
         )
         if !keepAttachment { instance.attachment = nil }
+<<<<<<< Updated upstream
         // Paying the last installment closes the plan; celebrate before closing the sheet.
         if let bill = instance.bill, bill.isInstallment, bill.isPaidOff {
             showingPaidOff = true
             return
         }
+=======
+        let link = canLogInKatherine && logInKatherine
+            ? KatherineLink.url(
+                payee: instance.bill?.name ?? "",
+                amount: amount,
+                date: paidDate,
+                method: method?.title,
+                note: referenceNumber.isEmpty ? nil : "Ref \(referenceNumber)"
+            )
+            : nil
+>>>>>>> Stashed changes
         dismiss()
+        if let link {
+            // After the sheet closes, so coming back to DueDay lands on the bill, not a half-closed sheet.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(450))
+                openURL(link)
+            }
+        }
     }
 }

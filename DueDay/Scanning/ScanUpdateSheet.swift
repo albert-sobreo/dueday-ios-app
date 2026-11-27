@@ -51,7 +51,7 @@ struct ScanUpdateSheet: View {
         FormScreen(
             title: instance.bill?.name ?? "Update bill",
             primaryTitle: "Update bill",
-            primaryEnabled: (amount ?? 0) > 0,
+            primaryEnabled: amount.map { $0 >= 0 } ?? false,
             onCancel: { dismiss() },
             changeToken: [amountText, dueDate, billingPeriod, keepScan] as [AnyHashable],
             onPrimary: save

@@ -22,7 +22,7 @@ struct AddBillEntryForm: View {
             title: "New bill",
             showsCancel: isSheet,
             primaryTitle: "Add bill",
-            primaryEnabled: (amount ?? 0) > 0,
+            primaryEnabled: amount.map { $0 >= 0 } ?? false,
             onCancel: isSheet ? onCancel : nil,
             changeToken: [amountText, dueDate, billingPeriod] as [AnyHashable],
             onPrimary: save
