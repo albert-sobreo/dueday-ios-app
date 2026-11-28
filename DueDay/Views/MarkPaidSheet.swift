@@ -16,14 +16,13 @@ struct MarkPaidSheet: View {
     @State private var paidDate = Date()
     @State private var referenceNumber = ""
     @State private var keepAttachment = true
-<<<<<<< Updated upstream
     @State private var showingPaidOff = false
-=======
     /// Katherine: Expense Tracker is installed, so the payment can be logged there too.
     @State private var canLogInKatherine = false
     @AppStorage("logInKatherine") private var logInKatherine = true
     @Environment(\.openURL) private var openURL
->>>>>>> Stashed changes
+    /// The Katherine link to open once the "Paid off!" alert is dismissed.
+    @State private var pendingKatherineLink: URL?
 
     private var amount: Decimal? { amountText.parsedAmount }
     private var strong: Color { Theme.detailStrong }
@@ -138,7 +137,7 @@ struct MarkPaidSheet: View {
             }
         }
         .alert("Paid off!", isPresented: $showingPaidOff) {
-            Button("Done") { dismiss() }
+            Button("Done") { close(opening: pendingKatherineLink) }
         } message: {
             Text("That was the last payment for \(instance.bill?.name ?? "this bill"). It's moved to Paid off on your Bills tab.")
         }
@@ -212,13 +211,6 @@ struct MarkPaidSheet: View {
             in: modelContext
         )
         if !keepAttachment { instance.attachment = nil }
-<<<<<<< Updated upstream
-        // Paying the last installment closes the plan; celebrate before closing the sheet.
-        if let bill = instance.bill, bill.isInstallment, bill.isPaidOff {
-            showingPaidOff = true
-            return
-        }
-=======
         let link = canLogInKatherine && logInKatherine
             ? KatherineLink.url(
                 payee: instance.bill?.name ?? "",
@@ -228,7 +220,18 @@ struct MarkPaidSheet: View {
                 note: referenceNumber.isEmpty ? nil : "Ref \(referenceNumber)"
             )
             : nil
->>>>>>> Stashed changes
+        // Paying the last installment closes the plan; celebrate before closing the sheet,
+        // and hand the payment to Katherine once the alert is dismissed.
+        if let bill = instance.bill, bill.isInstallment, bill.isPaidOff {
+            pendingKatherineLink = link
+            showingPaidOff = true
+            return
+        }
+        close(opening: link)
+    }
+
+    /// Closes the sheet, then opens the Katherine link if there is one.
+    private func close(opening link: URL?) {
         dismiss()
         if let link {
             // After the sheet closes, so coming back to DueDay lands on the bill, not a half-closed sheet.
